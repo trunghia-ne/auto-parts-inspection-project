@@ -1,0 +1,89 @@
+### 1. Đăng ký tài khoản Manager
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "manager01",
+  "password": "password123",
+  "role": "MANAGER"
+}
+
+### 2. Đăng nhập lấy Token
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "manager01",
+  "password": "password123"
+}
+
+> {%
+    // Script tự động lưu token vào biến môi trường của IntelliJ
+    client.global.set("auth_token", response.body.token);
+%}
+
+### 3. Thêm Phụ tùng (Tự động lấy token ở trên)
+POST http://localhost:8080/api/parts
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "partCode": "PT-001",
+  "partName": "Má phanh trước",
+  "specifications": "Chất liệu Ceramic, độ bền 50,000km"
+}
+
+### 4. Lấy danh sách phụ tùng (Cần token - authenticated user)
+GET http://localhost:8080/api/parts
+Authorization: Bearer {{auth_token}}
+
+### 5. Lấy phụ tùng theo ID
+GET http://localhost:8080/api/parts/1
+Authorization: Bearer {{auth_token}}
+
+### 6. Cập nhật phụ tùng (Cần role MANAGER hoặc ADMIN)
+PUT http://localhost:8080/api/parts/1
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "partCode": "PT-001-UPDATE",
+  "partName": "Má phanh trước (Updated)",
+  "specifications": "Chất liệu Ceramic, độ bền 60,000km"
+}
+
+### 7. Xóa phụ tùng (Cần role MANAGER hoặc ADMIN)
+DELETE http://localhost:8080/api/parts/1
+Authorization: Bearer {{auth_token}}
+
+### 8. Test trùng lặp mã phụ tùng
+POST http://localhost:8080/api/parts
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "partCode": "PT-002",
+  "partName": "Test phụ tùng trùng",
+  "specifications": "Test duplicate"
+}
+
+### 9. Đăng ký tài khoản Staff (không có quyền tạo/sửa/xóa phụ tùng)
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "staff01",
+  "password": "password123",
+  "role": "STAFF"
+}
+
+### 10. Test truy cập với Staff account (nên bị 403)
+POST http://localhost:8080/api/parts
+Content-Type: application/json
+Authorization: Bearer {{auth_token}}
+
+{
+  "partCode": "PT-021",
+  "partName": "Test với Staff",
+  "specifications": "Nên bị 403 Forbidden"
+}

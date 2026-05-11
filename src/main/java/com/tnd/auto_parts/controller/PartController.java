@@ -1,25 +1,51 @@
 package com.tnd.auto_parts.controller;
 
+import com.tnd.auto_parts.part.dto.PartRequest;
 import com.tnd.auto_parts.model.Part;
-import com.tnd.auto_parts.repository.PartRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.CrossOrigin;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.tnd.auto_parts.service.PartService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+// Tùy thuộc vào cách bạn config Role (ví dụ @PreAuthorize)
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/parts")
-@CrossOrigin(origins = "http://localhost:5173")// Cho phép Frontend Vite gọi vào
 public class PartController {
 
-    @Autowired
-    private PartRepository partRepository;
+    private final PartService partService;
 
+    public PartController(PartService partService) {
+        this.partService = partService;
+    }
+
+    // Ai đã đăng nhập cũng xem được danh sách
     @GetMapping
-    public List<Part> findAll() {
-        return partRepository.findAll();// Trả về toàn bộ phụ tùng trong DB dưới dạng JSON
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<Part>> getAllParts() {
+        return ResponseEntity.ok(partService.getAllParts());
+    }
+
+    // Chỉ Manager hoặc Admin mới được thêm/sửa/xóa
+    @PostMapping
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    public ResponseEntity<Part> createPart(@Valid @RequestBody PartRequest request) {
+        return new ResponseEntity<>(partService.createPart(request), HttpStatus.CREATED);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    public ResponseEntity<Part> updatePart(@PathVariable Long id, @Valid @RequestBody PartRequest request) {
+        return ResponseEntity.ok(partService.updatePart(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    public ResponseEntity<?> deletePart(@PathVariable Long id) {
+        partService.deletePart(id);
+        return ResponseEntity.ok().body("Xóa phụ tùng thành công");
     }
 }
