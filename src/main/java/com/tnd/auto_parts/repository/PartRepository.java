@@ -8,4 +8,5 @@ import org.springframework.stereotype.Repository;
 public interface PartRepository extends JpaRepository<Part, Long> {
     //kế thừa JpaRepository, Spring Boot sẽ tự động cung cấp sẵn
     // các hàm như findAll(), findById(), save(), delete()...
+    boolean existsByPartCode(String partCode);
 }
