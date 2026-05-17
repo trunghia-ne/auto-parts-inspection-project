@@ -1,58 +1,52 @@
-import { useEffect, useState } from 'react';
+// src/App.tsx
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React from 'react';
 
-// Khai báo kiểu dữ liệu TypeScript cho Phụ tùng
-interface Part {
-  id: number;
-  partCode: string;
-  partName: string;
-  specifications: string;
-}
+// Import Pages
+import Login from './pages/Login';
+import InspectionPOS from './pages/InspectionPOS';
+import ManagerDashboard from './pages/ManagerDashboard';
+
+// Import Layouts
+import AdminLayout from './layouts/AdminLayout';
+import PosLayout from './layouts/PosLayout';
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    const token = localStorage.getItem('token');
+    if (!token) return <Navigate to="/login" replace />;
+    return <>{children}</>;
+};
 
 function App() {
-  const [parts, setParts] = useState<Part[]>([]);
-  const [error, setError] = useState<string>('');
+    return (
+        <Router>
+            <Routes>
+                <Route path="/login" element={<Login />} />
 
-  useEffect(() => {
-    // Gọi API lấy danh sách phụ tùng
-    fetch('http://localhost:8080/api/parts', {
-      method: 'GET',
-      headers: {
-        // Mã hóa Basic Auth (admin:123456) thành base64 để đi qua rào bảo mật
-        'Authorization': 'Basic ' + btoa('admin:123456'),
-        'Content-Type': 'application/json'
-      }
-    })
-        .then(response => {
-          if (!response.ok) throw new Error('Không thể kết nối đến server');
-          return response.json();
-        })
-        .then(data => setParts(data))
-        .catch(err => setError(err.message));
-  }, []);
+                {/* ===== LUỒNG CỦA ADMIN / MANAGER ===== */}
+                <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+                    {/* Mặc định vào /admin sẽ nhảy sang /admin/dashboard */}
+                    <Route index element={<Navigate to="dashboard" replace />} />
 
-  return (
-      <div className="min-h-screen bg-gray-100 p-8">
-        <div className="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
-          <h1 className="text-2xl font-bold text-blue-600 mb-4">Hệ Thống Kiểm Định Phụ Tùng</h1>
+                    {/* Các trang con nằm TRONG AdminLayout */}
+                    <Route path="dashboard" element={<ManagerDashboard />} />
+                    {/* Sau này bạn code trang Quản lý phụ tùng thì ném vào đây: */}
+                    {/* <Route path="parts" element={<PartManager />} /> */}
+                </Route>
 
-          {error && <p className="text-red-500 mb-4">{error}</p>}
+                {/* ===== LUỒNG CỦA TRẠM KIỂM ĐỊNH (POS) ===== */}
+                <Route path="/pos" element={<ProtectedRoute><PosLayout /></ProtectedRoute>}>
+                    {/* Mặc định vào /pos sẽ load InspectionPOS */}
+                    <Route index element={<InspectionPOS />} />
+                    {/* Nếu có thêm trang lịch sử kiểm định cho nhân viên: */}
+                    {/* <Route path="history" element={<PosHistory />} /> */}
+                </Route>
 
-          <div className="border border-gray-200 rounded">
-            {parts.length === 0 ? (
-                <p className="p-4 text-gray-500 text-center">Chưa có dữ liệu phụ tùng nào trong hệ thống.</p>
-            ) : (
-                <ul className="divide-y divide-gray-200">
-                  {parts.map(part => (
-                      <li key={part.id} className="p-4 hover:bg-gray-50">
-                        <span className="font-bold text-gray-700">{part.partCode}</span> - {part.partName}
-                      </li>
-                  ))}
-                </ul>
-            )}
-          </div>
-        </div>
-      </div>
-  );
+                {/* Nếu gõ bậy URL, mặc định văng về Admin Dashboard */}
+                <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+            </Routes>
+        </Router>
+    );
 }
 
 export default App;
