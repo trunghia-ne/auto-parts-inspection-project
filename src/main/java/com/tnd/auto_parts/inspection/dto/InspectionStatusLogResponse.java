@@ -8,12 +8,10 @@ import java.time.LocalDateTime;
 
 @Data
 @Builder
-public class InspectionSessionResponse {
+public class InspectionStatusLogResponse {
     private Long id;
-    private String lotCode;
-    private Long partId;
-    private String partName;
+    private Long sessionId;
     private InspectionStatus status;
+    private String message;
     private LocalDateTime createdAt;
-    private LocalDateTime cancelledAt;
 }

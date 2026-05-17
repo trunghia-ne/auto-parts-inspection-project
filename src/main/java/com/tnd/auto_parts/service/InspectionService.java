@@ -3,9 +3,12 @@ package com.tnd.auto_parts.service;
 import com.tnd.auto_parts.inspection.dto.CreateInspectionSessionRequest;
 import com.tnd.auto_parts.model.InspectionDetail;
 import com.tnd.auto_parts.model.InspectionSession;
+import com.tnd.auto_parts.model.InspectionStatus;
+import com.tnd.auto_parts.model.InspectionStatusLog;
 import com.tnd.auto_parts.model.Part;
 import com.tnd.auto_parts.repository.InspectionDetailRepository;
 import com.tnd.auto_parts.repository.InspectionSessionRepository;
+import com.tnd.auto_parts.repository.InspectionStatusLogRepository;
 import com.tnd.auto_parts.repository.PartRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -20,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -45,17 +49,20 @@ public class InspectionService {
 
     private final InspectionSessionRepository sessionRepository;
     private final InspectionDetailRepository detailRepository;
+    private final InspectionStatusLogRepository statusLogRepository;
     private final PartRepository partRepository;
     private final String uploadDir;
 
     public InspectionService(
             InspectionSessionRepository sessionRepository,
             InspectionDetailRepository detailRepository,
+            InspectionStatusLogRepository statusLogRepository,
             PartRepository partRepository,
             @Value("${app.inspection.upload-dir:uploads/inspections}") String uploadDir
     ) {
         this.sessionRepository = sessionRepository;
         this.detailRepository = detailRepository;
+        this.statusLogRepository = statusLogRepository;
         this.partRepository = partRepository;
         this.uploadDir = uploadDir;
     }
@@ -67,10 +74,57 @@ public class InspectionService {
         InspectionSession session = InspectionSession.builder()
                 .lotCode(request.getLotCode().trim())
                 .part(part)
+                .status(InspectionStatus.PENDING)
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        return sessionRepository.save(session);
+        InspectionSession saved = sessionRepository.save(session);
+        createStatusLog(saved, saved.getStatus(), "Session created");
+        return saved;
+    }
+
+    public InspectionSession getSession(Long sessionId) {
+        return sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Inspection session not found: " + sessionId));
+    }
+
+    public InspectionSession updateStatus(Long sessionId, InspectionStatus status) {
+        if (status == null) {
+            throw new IllegalArgumentException("Status is required");
+        }
+
+        InspectionSession session = getSession(sessionId);
+        if (session.getStatus() == InspectionStatus.CANCELLED && status != InspectionStatus.CANCELLED) {
+            throw new IllegalStateException("Inspection session is cancelled");
+        }
+
+        boolean statusChanged = session.getStatus() != status;
+        boolean cancelledNow = status == InspectionStatus.CANCELLED && session.getCancelledAt() == null;
+
+        if (!statusChanged && !cancelledNow) {
+            return session;
+        }
+
+        if (statusChanged) {
+            session.setStatus(status);
+        }
+        if (cancelledNow) {
+            session.setCancelledAt(LocalDateTime.now());
+        }
+
+        InspectionSession saved = sessionRepository.save(session);
+        String message = status == InspectionStatus.CANCELLED ? "Session cancelled" : "Status updated";
+        createStatusLog(saved, status, message);
+        return saved;
+    }
+
+    public InspectionSession cancelSession(Long sessionId) {
+        return updateStatus(sessionId, InspectionStatus.CANCELLED);
+    }
+
+    public List<InspectionStatusLog> getStatusLogs(Long sessionId) {
+        getSession(sessionId);
+        return statusLogRepository.findAllBySessionIdOrderByCreatedAtAsc(sessionId);
     }
 
     public InspectionDetail addDetail(Long sessionId, MultipartFile image) {
@@ -90,6 +144,24 @@ public class InspectionService {
                 .build();
 
         return detailRepository.save(detail);
+    }
+
+    public InspectionDetail updateDetailImage(Long detailId, MultipartFile image) {
+        if (image == null || image.isEmpty()) {
+            throw new IllegalArgumentException("Image is required");
+        }
+
+        InspectionDetail detail = detailRepository.findById(detailId)
+                .orElseThrow(() -> new IllegalArgumentException("Inspection detail not found: " + detailId));
+
+        String oldPath = detail.getImagePath();
+        String storedPath = storeImage(detail.getSession().getId(), image);
+        detail.setImagePath(storedPath);
+        detail.setCreatedAt(LocalDateTime.now());
+
+        InspectionDetail saved = detailRepository.save(detail);
+        deleteImageFile(oldPath);
+        return saved;
     }
 
     public ImageResource loadDetailImage(Long detailId) {
@@ -137,5 +209,27 @@ public class InspectionService {
         }
 
         return dirPath.resolve(filename).toString().replace("\\", "/");
+    }
+
+    private void createStatusLog(InspectionSession session, InspectionStatus status, String message) {
+        InspectionStatusLog log = InspectionStatusLog.builder()
+                .session(session)
+                .status(status)
+                .message(message)
+                .createdAt(LocalDateTime.now())
+                .build();
+        statusLogRepository.save(log);
+    }
+
+    private void deleteImageFile(String path) {
+        if (path == null || path.isBlank()) {
+            return;
+        }
+
+        try {
+            Files.deleteIfExists(Paths.get(path));
+        } catch (IOException ex) {
+            // Ignore cleanup failures.
+        }
     }
 }

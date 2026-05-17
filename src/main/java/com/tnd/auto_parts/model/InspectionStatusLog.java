@@ -9,30 +9,28 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "inspection_sessions")
+@Table(name = "inspection_status_logs")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class InspectionSession {
+public class InspectionStatusLog {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 100)
-    private String lotCode;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "part_id", nullable = false)
-    private Part part;
+    @JoinColumn(name = "session_id", nullable = false)
+    private InspectionSession session;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private InspectionStatus status;
 
+    @Column(length = 255)
+    private String message;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
-
-    private LocalDateTime cancelledAt;
 }
