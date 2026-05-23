@@ -31,3 +31,47 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Môi trường ảo (Virtual Environments)
+venv/
+.venv/
+env/
+.env/
+env.bak/
+venv.bak/
+
+# Distribution / packaging (Các file build ra)
+/py_build/
+/py_dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Unit test / coverage reports (File test và cache)
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook (nếu có dùng để test)
+.ipynb_checkpoints
+
+# Môi trường (Environment variables)
+.envs
