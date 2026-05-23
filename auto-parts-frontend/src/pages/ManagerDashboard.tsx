@@ -1,84 +1,44 @@
-import { useEffect, useState } from 'react';
-import { partService } from '../api/partService';
-import type { Part } from '../api/partService';
+import { Activity, AlertTriangle, CheckCircle, Package } from 'lucide-react';
 
-export default function ManagerDashboard() {
-    const [parts, setParts] = useState<Part[]>([]);
-    const [loading, setLoading] = useState(true);
+const ManagerDashboard = () => {
+  // Dữ liệu giả (Mock Data) để vẽ giao diện trước. 
+  // Sau này chúng ta sẽ gọi API Spring Boot để lấy số thật nhét vào đây.
+  const stats = [
+    { title: 'Tổng phiên kiểm định', value: '1,248', icon: Package, color: 'text-blue-600', bg: 'bg-blue-100' },
+    { title: 'Đạt (PASSED)', value: '1,180', icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-100' },
+    { title: 'Lỗi (FAILED)', value: '68', icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-100' },
+    { title: 'Tỷ lệ lỗi', value: '5.4%', icon: Activity, color: 'text-orange-600', bg: 'bg-orange-100' },
+  ];
 
-    useEffect(() => {
-        fetchParts();
-    }, []);
-
-    const fetchParts = async () => {
-        try {
-            const data = await partService.getAllParts();
-            setParts(data);
-        } catch (error) {
-            console.error("Lỗi khi tải danh sách phụ tùng:", error);
-            alert("Không thể tải dữ liệu. Vui lòng kiểm tra lại kết nối hoặc Token.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDelete = async (id: number) => {
-        if (window.confirm("Bạn có chắc chắn muốn xóa phụ tùng này?")) {
-            try {
-                await partService.deletePart(id);
-                setParts(parts.filter(p => p.id !== id)); // Cập nhật lại UI sau khi xóa
-            } catch (error) {
-                alert("Xóa thất bại!");
-            }
-        }
-    };
-
-    return (
-        <div className="p-8">
-            <header className="mb-8">
-                <h1 className="text-2xl font-bold text-slate-800">Quản Lý Danh Mục Phụ Tùng</h1>
-            </header>
-
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-800 text-lg">Danh sách từ Database</h3>
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-medium transition">
-                        + Thêm Phụ Tùng Mới
-                    </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm text-gray-600">
-                        <thead className="bg-gray-50 text-xs text-gray-700 uppercase font-semibold">
-                        <tr>
-                            <th className="p-4">Mã PT</th>
-                            <th className="p-4">Tên Phụ Tùng</th>
-                            <th className="p-4">Thông Số Kỹ Thuật</th>
-                            <th className="p-4 text-right">Hành động</th>
-                        </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                        {loading ? (
-                            <tr><td colSpan={4} className="p-4 text-center">Đang tải dữ liệu...</td></tr>
-                        ) : parts.length === 0 ? (
-                            <tr><td colSpan={4} className="p-4 text-center">Chưa có dữ liệu.</td></tr>
-                        ) : (
-                            parts.map((part) => (
-                                <tr key={part.id} className="hover:bg-gray-50 transition">
-                                    <td className="p-4 font-mono font-bold text-slate-700">{part.partCode}</td>
-                                    <td className="p-4 font-medium text-slate-900">{part.partName}</td>
-                                    <td className="p-4 text-gray-500">{part.specifications}</td>
-                                    <td className="p-4 text-right space-x-3">
-                                        <button className="text-blue-600 hover:underline font-medium">Sửa</button>
-                                        <button onClick={() => handleDelete(part.id)} className="text-red-600 hover:underline font-medium">Xóa</button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                        </tbody>
-                    </table>
-                </div>
+  return (
+    <div className="space-y-6">
+      {/* 4 Thẻ Thống Kê */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {stats.map((stat, index) => {
+          const Icon = stat.icon;
+          return (
+            <div key={index} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 transition-transform hover:-translate-y-1">
+              <div className={`p-4 rounded-xl ${stat.bg}`}>
+                <Icon className={`w-8 h-8 ${stat.color}`} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-500 mb-1">{stat.title}</p>
+                <h3 className="text-2xl font-bold text-slate-800">{stat.value}</h3>
+              </div>
             </div>
+          );
+        })}
+      </div>
+
+      {/* Khung chứa bảng dữ liệu (Tạm thời để trống) */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm min-h-[400px]">
+        <h3 className="text-lg font-bold text-slate-800 mb-4">Lịch sử kiểm định gần đây</h3>
+        <div className="flex items-center justify-center h-64 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50">
+          <p className="text-slate-500 font-medium">Bảng dữ liệu đang được cập nhật từ API...</p>
         </div>
-    );
-}
+      </div>
+    </div>
+  );
+};
+
+export default ManagerDashboard;

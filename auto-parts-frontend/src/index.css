@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+@theme {
+  --animate-scan: scan 2s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.5s infinite;
+
+  @keyframes scan {
+    0%, 100% { transform: translateY(-100%); }
+    50% { transform: translateY(100%); }
+  }
+  @keyframes shimmer {
+    100% { transform: translateX(200%); }
+  }
+}

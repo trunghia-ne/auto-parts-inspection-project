@@ -1,5 +1,6 @@
 package com.tnd.auto_parts.service;
 
+import com.tnd.auto_parts.inspection.dto.AiResultDTO;
 import com.tnd.auto_parts.inspection.dto.CreateInspectionSessionRequest;
 import com.tnd.auto_parts.model.InspectionDetail;
 import com.tnd.auto_parts.model.InspectionSession;
@@ -15,6 +16,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,30 +31,14 @@ import java.util.UUID;
 @Service
 public class InspectionService {
 
-    public static class ImageResource {
-        private final Resource resource;
-        private final String contentType;
-
-        public ImageResource(Resource resource, String contentType) {
-            this.resource = resource;
-            this.contentType = contentType;
-        }
-
-        public Resource getResource() {
-            return resource;
-        }
-
-        public String getContentType() {
-            return contentType;
-        }
-    }
-
+    // 1. KHAI BÁO BIẾN LUÔN ĐẶT TRÊN CÙNG
     private final InspectionSessionRepository sessionRepository;
     private final InspectionDetailRepository detailRepository;
     private final InspectionStatusLogRepository statusLogRepository;
     private final PartRepository partRepository;
     private final String uploadDir;
 
+    // 2. CONSTRUCTOR
     public InspectionService(
             InspectionSessionRepository sessionRepository,
             InspectionDetailRepository detailRepository,
@@ -65,6 +51,36 @@ public class InspectionService {
         this.statusLogRepository = statusLogRepository;
         this.partRepository = partRepository;
         this.uploadDir = uploadDir;
+    }
+
+    // 3. CÁC PHƯƠNG THỨC XỬ LÝ (BUSINESS LOGIC)
+
+    @Transactional
+    public void updateAiResult(Long detailId, AiResultDTO aiResult) {
+        // 1. Tìm chi tiết kiểm định
+        InspectionDetail detail = detailRepository.findById(detailId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy chi tiết kiểm định với ID: " + detailId));
+
+        InspectionSession session = detail.getSession();
+
+        // 2. Lấy AI Class ID được cấu hình sẵn trong cấu trúc Phụ tùng
+        Integer expectedAiClassId = session.getPart().getAiClassId();
+
+        // Lấy Class ID thực tế do Python AI phân tích được từ ảnh
+        Long predictedAiClassId = aiResult.getClassId();
+
+        float CONFIDENCE_THRESHOLD = 0.8f;
+
+        // 3. Tiến hành so sánh trực tiếp hai mã AI Class với nhau
+        InspectionStatus finalStatus;
+        if (expectedAiClassId != null && expectedAiClassId.longValue() == predictedAiClassId && aiResult.getConfidence() >= CONFIDENCE_THRESHOLD) {
+            finalStatus = InspectionStatus.PASSED;
+        } else {
+            finalStatus = InspectionStatus.FAILED;
+        }
+
+        // 4. Cập nhật trạng thái phiên và lưu lịch sử hệ thống
+        this.updateStatus(session.getId(), finalStatus);
     }
 
     public InspectionSession createSession(CreateInspectionSessionRequest request) {
@@ -185,6 +201,8 @@ public class InspectionService {
         }
     }
 
+    // 4. PRIVATE HELPER METHODS
+
     private String storeImage(Long sessionId, MultipartFile image) {
         String originalName = image.getOriginalFilename();
         String extension = "";
@@ -230,6 +248,26 @@ public class InspectionService {
             Files.deleteIfExists(Paths.get(path));
         } catch (IOException ex) {
             // Ignore cleanup failures.
+        }
+    }
+
+    // 5. INNER CLASSES
+
+    public static class ImageResource {
+        private final Resource resource;
+        private final String contentType;
+
+        public ImageResource(Resource resource, String contentType) {
+            this.resource = resource;
+            this.contentType = contentType;
+        }
+
+        public Resource getResource() {
+            return resource;
+        }
+
+        public String getContentType() {
+            return contentType;
         }
     }
 }

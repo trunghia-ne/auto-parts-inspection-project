@@ -1,24 +1,21 @@
 import axiosClient from './axiosClient';
 
-export const authService = {
-    login: async (credentials: any) => {
-        const response = await axiosClient.post('/auth/login', credentials);
-        // Lưu token và thông tin user vào LocalStorage ngay khi login thành công
-        if (response.data.token) {
-            localStorage.setItem('token', response.data.token);
-            localStorage.setItem('user', JSON.stringify(response.data));
-        }
-        return response.data;
-    },
+// Định nghĩa dữ liệu gửi đi (khớp với LoginRequest.java)
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
 
-    register: async (data: any) => {
-        const response = await axiosClient.post('/auth/register', data);
-        return response.data;
-    },
+// Định nghĩa dữ liệu nhận về (khớp với AuthResponse.java)
+export interface AuthResponse {
+  token: string;
+  tokenType: string;
+  username: string;
+  roles: string[];
+}
 
-    logout: () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-    }
+// Hàm gọi API đăng nhập
+export const loginApi = async (credentials: LoginRequest): Promise<AuthResponse> => {
+  const response = await axiosClient.post<any, AuthResponse>('/auth/login', credentials);
+  return response;
 };

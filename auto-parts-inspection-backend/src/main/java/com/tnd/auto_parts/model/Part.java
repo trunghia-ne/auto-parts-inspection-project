@@ -26,4 +26,7 @@ public class Part {
     private String partName; // Tên phụ tùng
 
     private String specifications; // Thông số kỹ thuật
+
+    @Column(name = "ai_class_id", unique = true)
+    private Integer aiClassId;
 }
