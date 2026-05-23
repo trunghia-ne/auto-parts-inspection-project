@@ -1,14 +1,12 @@
 package com.tnd.auto_parts.controller;
 
-import com.tnd.auto_parts.inspection.dto.CreateInspectionSessionRequest;
-import com.tnd.auto_parts.inspection.dto.InspectionDetailResponse;
-import com.tnd.auto_parts.inspection.dto.InspectionSessionResponse;
-import com.tnd.auto_parts.inspection.dto.InspectionStatusLogResponse;
-import com.tnd.auto_parts.inspection.dto.UpdateInspectionStatusRequest;
+import com.tnd.auto_parts.inspection.dto.*;
 import com.tnd.auto_parts.model.InspectionDetail;
 import com.tnd.auto_parts.model.InspectionSession;
 import com.tnd.auto_parts.model.InspectionStatusLog;
 import com.tnd.auto_parts.service.InspectionService;
+import com.tnd.auto_parts.service.AiClientService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,13 +21,11 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/inspections")
+@RequiredArgsConstructor
 public class InspectionController {
 
     private final InspectionService inspectionService;
-
-    public InspectionController(InspectionService inspectionService) {
-        this.inspectionService = inspectionService;
-    }
+    private final AiClientService aiClientService;
 
     @PostMapping("/sessions")
     public ResponseEntity<InspectionSessionResponse> createSession(
@@ -41,8 +37,7 @@ public class InspectionController {
 
     @GetMapping("/sessions/{sessionId}")
     public ResponseEntity<InspectionSessionResponse> getSession(@PathVariable Long sessionId) {
-        InspectionSession session = inspectionService.getSession(sessionId);
-        return ResponseEntity.ok(toSessionResponse(session));
+        return ResponseEntity.ok(toSessionResponse(inspectionService.getSession(sessionId)));
     }
 
     @PatchMapping("/sessions/{sessionId}/status")
@@ -56,9 +51,10 @@ public class InspectionController {
 
     @PostMapping("/sessions/{sessionId}/cancel")
     public ResponseEntity<InspectionSessionResponse> cancelSession(@PathVariable Long sessionId) {
-        InspectionSession session = inspectionService.cancelSession(sessionId);
-        return ResponseEntity.ok(toSessionResponse(session));
+        return ResponseEntity.ok(toSessionResponse(inspectionService.cancelSession(sessionId)));
     }
+
+    // --- CÁC API LIÊN QUAN ĐẾN HÌNH ẢNH VÀ AI ---
 
     @PostMapping(value = "/sessions/{sessionId}/details", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<InspectionDetailResponse> addDetail(
@@ -66,20 +62,7 @@ public class InspectionController {
             @RequestParam("image") MultipartFile image
     ) {
         InspectionDetail detail = inspectionService.addDetail(sessionId, image);
-        String imageUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/api/inspections/details/")
-                .path(detail.getId().toString())
-                .path("/image")
-                .toUriString();
-
-        InspectionDetailResponse response = InspectionDetailResponse.builder()
-                .id(detail.getId())
-                .sessionId(detail.getSession().getId())
-                .imageUrl(imageUrl)
-                .createdAt(detail.getCreatedAt())
-                .build();
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(toDetailResponse(detail));
     }
 
     @PutMapping(value = "/details/{detailId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -88,29 +71,26 @@ public class InspectionController {
             @RequestParam("image") MultipartFile image
     ) {
         InspectionDetail detail = inspectionService.updateDetailImage(detailId, image);
-        String imageUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/api/inspections/details/")
-                .path(detail.getId().toString())
-                .path("/image")
-                .toUriString();
-
-        InspectionDetailResponse response = InspectionDetailResponse.builder()
-                .id(detail.getId())
-                .sessionId(detail.getSession().getId())
-                .imageUrl(imageUrl)
-                .createdAt(detail.getCreatedAt())
-                .build();
-
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(toDetailResponse(detail));
     }
 
-    @GetMapping("/sessions/{sessionId}/logs")
-    public ResponseEntity<List<InspectionStatusLogResponse>> getSessionLogs(@PathVariable Long sessionId) {
-        List<InspectionStatusLog> logs = inspectionService.getStatusLogs(sessionId);
-        List<InspectionStatusLogResponse> response = logs.stream()
-                .map(this::toStatusLogResponse)
-                .toList();
-        return ResponseEntity.ok(response);
+    // 🔥 API Tích hợp gọi AI Python (Đã được kích hoạt)
+    @PostMapping(value = "/sessions/{sessionId}/inspect", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<InspectionDetailResponse> performAiInspection(
+            @PathVariable Long sessionId,
+            @RequestParam("image") MultipartFile image
+    ) {
+        // 1. Lưu ảnh vào hệ thống local thông qua service hiện tại
+        InspectionDetail detail = inspectionService.addDetail(sessionId, image);
+
+        // 2. Gửi ảnh sang Python FastAPI để phân tích
+        AiResultDTO aiResult = aiClientService.analyzeImage(image);
+
+        // 3. Cập nhật kết quả AI dự đoán vào Database
+        inspectionService.updateAiResult(detail.getId(), aiResult);
+
+        // 4. Trả về thông tin chi tiết ảnh vừa kiểm tra
+        return ResponseEntity.status(HttpStatus.CREATED).body(toDetailResponse(detail));
     }
 
     @GetMapping("/details/{detailId}/image")
@@ -119,6 +99,34 @@ public class InspectionController {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(imageResource.getContentType()))
                 .body(imageResource.getResource());
+    }
+
+    // --- HELPER METHODS ---
+
+    @GetMapping("/sessions/{sessionId}/logs")
+    public ResponseEntity<List<InspectionStatusLogResponse>> getSessionLogs(@PathVariable Long sessionId) {
+        List<InspectionStatusLogResponse> response = inspectionService.getStatusLogs(sessionId)
+                .stream()
+                .map(this::toStatusLogResponse)
+                .toList();
+        return ResponseEntity.ok(response);
+    }
+
+    private String buildImageUrl(Long detailId) {
+        return ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/inspections/details/")
+                .path(detailId.toString())
+                .path("/image")
+                .toUriString();
+    }
+
+    private InspectionDetailResponse toDetailResponse(InspectionDetail detail) {
+        return InspectionDetailResponse.builder()
+                .id(detail.getId())
+                .sessionId(detail.getSession().getId())
+                .imageUrl(buildImageUrl(detail.getId()))
+                .createdAt(detail.getCreatedAt())
+                .build();
     }
 
     private InspectionSessionResponse toSessionResponse(InspectionSession session) {
