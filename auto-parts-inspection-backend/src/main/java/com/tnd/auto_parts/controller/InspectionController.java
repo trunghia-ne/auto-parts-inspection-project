@@ -138,6 +138,7 @@ public class InspectionController {
                 .status(session.getStatus())
                 .createdAt(session.getCreatedAt())
                 .cancelledAt(session.getCancelledAt())
+                .createdBy(session.getCreatedBy())
                 .build();
     }
 

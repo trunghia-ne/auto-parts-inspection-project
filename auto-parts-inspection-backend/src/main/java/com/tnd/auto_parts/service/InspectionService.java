@@ -14,6 +14,8 @@ import com.tnd.auto_parts.repository.PartRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,6 +94,7 @@ public class InspectionService {
                 .part(part)
                 .status(InspectionStatus.PENDING)
                 .createdAt(LocalDateTime.now())
+                .createdBy(resolveCurrentUsername())
                 .build();
 
         InspectionSession saved = sessionRepository.save(session);
@@ -227,6 +230,18 @@ public class InspectionService {
         }
 
         return dirPath.resolve(filename).toString().replace("\\", "/");
+    }
+
+    private String resolveCurrentUsername() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        String name = authentication.getName();
+        if (name == null || "anonymousUser".equals(name)) {
+            return null;
+        }
+        return name;
     }
 
     private void createStatusLog(InspectionSession session, InspectionStatus status, String message) {
