@@ -35,4 +35,7 @@ public class InspectionSession {
     private LocalDateTime createdAt;
 
     private LocalDateTime cancelledAt;
+
+    @Column(length = 100)
+    private String createdBy;
 }
