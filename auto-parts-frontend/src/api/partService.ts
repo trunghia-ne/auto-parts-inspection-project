@@ -9,13 +9,13 @@ export interface Part {
 
 export const partService = {
     getAllParts: async (): Promise<Part[]> => {
-        const response = await axiosClient.get('/parts');
-        return response.data;
+        const response: any = await axiosClient.get('/parts');
+        return response?.data ?? response;
     },
 
     createPart: async (data: Omit<Part, 'id'>): Promise<Part> => {
-        const response = await axiosClient.post('/parts', data);
-        return response.data;
+        const response: any = await axiosClient.post('/parts', data);
+        return response?.data ?? response;
     },
 
     deletePart: async (id: number): Promise<void> => {

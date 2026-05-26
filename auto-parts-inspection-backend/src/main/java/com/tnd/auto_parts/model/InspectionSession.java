@@ -38,4 +38,15 @@ public class InspectionSession {
 
     @Column(length = 100)
     private String createdBy;
+
+    // -----------------------------------------------------------------
+    // 🔥 BỔ SUNG 2 TRƯỜNG NÀY ĐỂ LƯU KẾT QUẢ TỪ AI PYTHON VÀO DATABASE
+    // -----------------------------------------------------------------
+
+    @Column(name = "defect_type")
+    private String defectType;
+
+    // Dùng kiểu TEXT để chứa được chuỗi JSON mảng tọa độ dài
+    @Column(name = "bounding_boxes", columnDefinition = "TEXT")
+    private String boundingBoxes;
 }
