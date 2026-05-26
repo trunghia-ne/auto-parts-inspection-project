@@ -59,29 +59,42 @@ public class InspectionService {
 
     @Transactional
     public void updateAiResult(Long detailId, AiResultDTO aiResult) {
-        // 1. Tìm chi tiết kiểm định
         InspectionDetail detail = detailRepository.findById(detailId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy chi tiết kiểm định với ID: " + detailId));
-
         InspectionSession session = detail.getSession();
 
-        // 2. Lấy AI Class ID được cấu hình sẵn trong cấu trúc Phụ tùng
-        Integer expectedAiClassId = session.getPart().getAiClassId();
-
-        // Lấy Class ID thực tế do Python AI phân tích được từ ảnh
-        Long predictedAiClassId = aiResult.getClassId();
-
-        float CONFIDENCE_THRESHOLD = 0.8f;
-
-        // 3. Tiến hành so sánh trực tiếp hai mã AI Class với nhau
         InspectionStatus finalStatus;
-        if (expectedAiClassId != null && expectedAiClassId.longValue() == predictedAiClassId && aiResult.getConfidence() >= CONFIDENCE_THRESHOLD) {
-            finalStatus = InspectionStatus.PASSED;
-        } else {
+
+        // 1. TÔN TRỌNG KẾT QUẢ TỪ PYTHON TRƯỚC (ƯU TIÊN KỊCH BẢN DEMO)
+        if ("FAILED".equalsIgnoreCase(aiResult.getStatus())) {
             finalStatus = InspectionStatus.FAILED;
+        } else {
+            // Nếu Python báo PASSED, Java mới check tiếp logic chống lắp nhầm
+            Integer expectedAiClassId = session.getPart().getAiClassId();
+            Long predictedAiClassId = aiResult.getClassId();
+            float CONFIDENCE_THRESHOLD = 0.8f;
+
+            if (expectedAiClassId != null && expectedAiClassId.longValue() != predictedAiClassId) {
+                finalStatus = InspectionStatus.FAILED; // Báo lỗi vì lắp nhầm hàng
+            } else if (aiResult.getConfidence() < CONFIDENCE_THRESHOLD) {
+                finalStatus = InspectionStatus.FAILED; // Báo lỗi vì độ tự tin thấp
+            } else {
+                finalStatus = InspectionStatus.PASSED;
+            }
         }
 
-        // 4. Cập nhật trạng thái phiên và lưu lịch sử hệ thống
+        // 2. LƯU LẠI LỖI VÀ TỌA ĐỘ NẾU BỊ FAILED
+        if (finalStatus == InspectionStatus.FAILED) {
+            session.setDefectType(aiResult.getDefectType());
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                session.setBoundingBoxes(mapper.writeValueAsString(aiResult.getBoundingBoxes()));
+            } catch (Exception e) {
+                session.setBoundingBoxes("[]");
+            }
+        }
+
+        sessionRepository.save(session);
         this.updateStatus(session.getId(), finalStatus);
     }
 
