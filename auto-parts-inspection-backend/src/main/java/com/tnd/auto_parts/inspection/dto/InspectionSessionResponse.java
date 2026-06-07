@@ -17,4 +17,8 @@ public class InspectionSessionResponse {
     private LocalDateTime createdAt;
     private LocalDateTime cancelledAt;
     private String createdBy;
+
+
+    private String defectType;
+    private Object boundingBoxes;
 }

@@ -1,5 +1,6 @@
 package com.tnd.auto_parts.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper; // 🔥 Đã thêm import này
 import com.tnd.auto_parts.inspection.dto.*;
 import com.tnd.auto_parts.model.InspectionDetail;
 import com.tnd.auto_parts.model.InspectionSession;
@@ -89,7 +90,7 @@ public class InspectionController {
         // 3. Cập nhật kết quả AI dự đoán vào Database
         inspectionService.updateAiResult(detail.getId(), aiResult);
 
-        // 4. Trả về thông tin chi tiết ảnh vừa kiểm tra
+        // 4. Trả về thông vị chi tiết ảnh vừa kiểm tra
         return ResponseEntity.status(HttpStatus.CREATED).body(toDetailResponse(detail));
     }
 
@@ -129,7 +130,17 @@ public class InspectionController {
                 .build();
     }
 
+    // 🔥 ĐÃ CẬP NHẬT HÀM NÀY ĐỂ TRẢ VỀ LỖI VÀ TỌA ĐỘ CHO REACT
     private InspectionSessionResponse toSessionResponse(InspectionSession session) {
+        Object parsedBoxes = null;
+        try {
+            if (session.getBoundingBoxes() != null && !session.getBoundingBoxes().trim().isEmpty()) {
+                parsedBoxes = new ObjectMapper().readValue(session.getBoundingBoxes(), Object.class);
+            }
+        } catch (Exception ignored) {
+            // Bỏ qua nếu không parse được JSON
+        }
+
         return InspectionSessionResponse.builder()
                 .id(session.getId())
                 .lotCode(session.getLotCode())
@@ -139,6 +150,8 @@ public class InspectionController {
                 .createdAt(session.getCreatedAt())
                 .cancelledAt(session.getCancelledAt())
                 .createdBy(session.getCreatedBy())
+                .defectType(session.getDefectType()) // Lấy loại lỗi
+                .boundingBoxes(parsedBoxes)          // Lấy tọa độ
                 .build();
     }
 
