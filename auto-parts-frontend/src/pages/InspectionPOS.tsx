@@ -126,6 +126,7 @@ function InspectionPOSContent() {
         }
         setLoading(true);
         try {
+
             await inspectionService.updateStatus(currentSession.id, 'PROCESSING');
             setCurrentSession(prev => prev ? { ...prev, status: 'PROCESSING' } : null);
 
@@ -163,6 +164,7 @@ function InspectionPOSContent() {
         if (window.confirm("Bạn có chắc chắn muốn hủy lượt kiểm định này không?")) {
             setLoading(true);
             try {
+
                 const response = await fetch(`http://localhost:8080/api/inspections/sessions/${currentSession.id}/cancel`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || ''}` }
@@ -175,7 +177,7 @@ function InspectionPOSContent() {
                     setAiResult(null);
                 }
             } catch (err) {
-                alert("Hủy thất bại.");
+                alert("Lỗi khi hủy.");
             } finally {
                 setLoading(false);
             }
@@ -336,8 +338,25 @@ function InspectionPOSContent() {
                             Hủy bỏ lượt kiểm
                         </button>
                     </div>
-                )}
-            </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Chọn ảnh phụ tùng</label>
+                        <input type="file" accept="image/*" onChange={handleFileChange} />
+                    </div>
+
+                    {previewUrl && (
+                        <img src={previewUrl} alt="Preview" className="max-h-64 rounded border" />
+                    )}
+
+                    <button
+                        onClick={handleUploadImage}
+                        disabled={loading || !selectedFile}
+                        className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                    >
+                        {loading ? 'Đang phân tích...' : 'Upload & Phân tích AI'}
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
