@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, LogOut, User, Zap } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, LogOut, User, Zap, Users } from 'lucide-react';
 
 const AdminLayout = () => {
   const location = useLocation();
@@ -14,6 +14,7 @@ const AdminLayout = () => {
   // Danh sách menu bên trái
   const navItems = [
     { path: '/admin', name: 'Tổng quan (Dashboard)', icon: LayoutDashboard },
+    { path: '/admin/users', name: 'Quản lý nhân sự', icon: Users },
     { path: '/pos', name: 'Mở trạm POS (Kiểm định)', icon: ClipboardList },
     // Vài hôm nữa bạn làm trang quản lý phụ tùng thì mở comment dòng dưới ra:
     // { path: '/admin/parts', name: 'Quản lý Phụ tùng', icon: Box },

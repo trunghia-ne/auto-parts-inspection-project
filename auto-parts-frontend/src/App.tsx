@@ -7,7 +7,7 @@ import PosLayout from './layouts/PosLayout';
 // Import Pages
 import Login from './pages/Login';
 import ManagerDashboard from './pages/ManagerDashboard';
-import InspectionPOS from './pages/InspectionPOS';
+import UserManagement from './pages/UserManagement';
 
 function App() {
   return (
@@ -20,13 +20,12 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         {/* Luồng 2: Trạm Kiểm Định POS (Giao diện đơn giản để bắn ảnh) */}
-        <Route path="/pos" element={<PosLayout />}>
-          <Route index element={<InspectionPOS />} />
-        </Route>
+        <Route path="/pos" element={<PosLayout />} />
 
         {/* Luồng 3: Trang Quản Lý (Dành cho Manager xem thống kê, quản lý phụ tùng) */}
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<ManagerDashboard />} />
+          <Route path="users" element={<UserManagement />} />
         </Route>
         
       </Routes>
