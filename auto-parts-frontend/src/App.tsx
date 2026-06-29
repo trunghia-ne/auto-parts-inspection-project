@@ -1,36 +1,43 @@
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Login } from './components/Login'; 
+import { InspectionPage } from './components/InspectionPage';
 
-// Import Layouts
-import AdminLayout from './layouts/AdminLayout';
-import PosLayout from './layouts/PosLayout';
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
 
-// Import Pages
-import Login from './pages/Login';
-import ManagerDashboard from './pages/ManagerDashboard';
-import UserManagement from './pages/UserManagement';
-
-function App() {
+const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Mặc định vào thẳng trang đăng nhập */}
-        <Route path="/" element={<Navigate to="/login" replace />} />
-
-        {/* Luồng 1: Trang Đăng Nhập (Không dùng Layout chung) */}
         <Route path="/login" element={<Login />} />
 
-        {/* Luồng 2: Trạm Kiểm Định POS (Giao diện đơn giản để bắn ảnh) */}
-        <Route path="/pos" element={<PosLayout />} />
-
-        {/* Luồng 3: Trang Quản Lý (Dành cho Manager xem thống kê, quản lý phụ tùng) */}
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<ManagerDashboard />} />
-          <Route path="users" element={<UserManagement />} />
-        </Route>
+        <Route 
+          path="/" 
+          element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10">
+                <div className="text-center mb-8">
+                  <h1 className="text-3xl font-extrabold text-blue-900 mb-2">
+                    Hệ thống Quản lý Kiểm định Auto Parts
+                  </h1>
+                </div>
+                <InspectionPage/>
+                {/* <ApiTest /> */}
+              </div>
+            </ProtectedRoute>
+          } 
+        />
         
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
-}
+};
 
 export default App;

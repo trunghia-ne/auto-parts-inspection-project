@@ -1,19 +1,17 @@
 import axios from 'axios';
 
-// Khởi tạo instance với Base URL trỏ về backend Spring Boot
 const axiosClient = axios.create({
-  baseURL: 'http://localhost:8080/api', 
+  baseURL: 'http://localhost:8080/api',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Tự động kẹp Token vào Header trước khi request bay đi
+// Interceptor cho Request: Tự động đính kèm Token
 axiosClient.interceptors.request.use(
   (config) => {
-    // Lấy token từ localStorage (sẽ được lưu lúc Login)
-    const token = localStorage.getItem('token');
-    if (token) {
+    const token = localStorage.getItem('auth_token');
+    if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -23,16 +21,16 @@ axiosClient.interceptors.request.use(
   }
 );
 
-// Xử lý lỗi chung khi response trả về
+// Interceptor cho Response: Xử lý lỗi toàn cục
 axiosClient.interceptors.response.use(
   (response) => {
-    return response.data; // Chỉ lấy phần data, bỏ qua vỏ bọc của axios
+    return response.data; // Trả thẳng data, bỏ qua vỏ config của axios
   },
   (error) => {
-    // Nếu token hết hạn (mã 401) -> Đá văng ra trang Login
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+    if (error.response && error.response.status === 401) {
+      // Token hết hạn hoặc sai, tự động đăng xuất
+      localStorage.removeItem('auth_token');
+      window.location.href = '/login'; 
     }
     return Promise.reject(error);
   }
