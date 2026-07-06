@@ -1,369 +1,531 @@
-import React, { useState, useEffect, useRef, type MouseEvent } from 'react';
-import { partService, type Part } from '../api/partService';
-import { inspectionApi, type BoundingBox } from '../api/inspectionApi';
+import React, { useState, useEffect, useRef } from 'react';
+import { qcApi, type QcSessionResponse, type BoundingBox } from '../api/qcApi';
 
 export const InspectionPage: React.FC = () => {
-    // --- Quản lý State hệ thống ---
-    const [parts, setParts] = useState<Part[]>([]);
+    // --- State quản lý luồng ---
+    const [pendingSessions, setPendingSessions] = useState<QcSessionResponse[]>([]);
     const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
 
-    // Data của phiên hiện tại
-    const [lotCode, setLotCode] = useState('');
-    const [selectedPartId, setSelectedPartId] = useState<number>(0);
-    const [sessionId, setSessionId] = useState<number | null>(null);
+    // --- State của phiên hiện tại ---
+    const [activeSession, setActiveSession] = useState<QcSessionResponse | null>(null);
     const [imageUrl, setImageUrl] = useState('');
+    const [currentImgIndex, setCurrentImgIndex] = useState(0);
+    const [defectDescription, setDefectDescription] = useState('');
 
-    // State phục vụ việc khoanh vùng lỗi (Human-in-the-loop)
+    // --- State Vẽ khung lỗi ---
     const [boxes, setBoxes] = useState<BoundingBox[]>([]);
     const [currentLabel, setCurrentLabel] = useState<'scratch' | 'crack'>('scratch');
-    const [defectDescription, setDefectDescription] = useState('');
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
     const [activeBox, setActiveBox] = useState<BoundingBox | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+
+
 
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Tải danh mục phụ tùng khi mở trang
+    // Load hàng chờ khi mở trang
     useEffect(() => {
-        partService.getAllParts()
-            .then(data => {
-                setParts(data);
-                if (data.length > 0) setSelectedPartId(data[0].id);
-            })
-            .catch(() => setErrorMessage('Không thể tải danh mục phụ tùng từ máy chủ!'));
+        fetchPending();
     }, []);
 
-    // --- HÀM XỬ LÝ API ---
-
-    // Bấm nút Tạo Phiên Kiểm Định
-    const handleCreateSession = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!lotCode.trim()) return;
+    const fetchPending = () => {
         setIsLoading(true);
+        qcApi.getPendingSessions()
+            .then(setPendingSessions)
+            .catch(() => setErrorMessage('Không thể tải danh sách hàng chờ!'))
+            .finally(() => setIsLoading(false));
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_roles');
+        window.location.href = '/login';
+    };
+
+    const handleSelectSession = (session: QcSessionResponse) => {
+        setActiveSession(session);
         setErrorMessage('');
-        try {
-            const session = await inspectionApi.createSession({ lotCode, partId: selectedPartId });
-            setSessionId(session.id);
-            setCurrentStep(2); // Chuyển sang bước upload ảnh
-        } catch (err: any) {
-            setErrorMessage('Lỗi khởi tạo phiên kiểm định!');
-        } finally {
-            setIsLoading(false);
+        setBoxes([]);
+        setDefectDescription('');
+        setCurrentImgIndex(0); // 🔥 THÊM DÒNG NÀY: Reset chỉ mục ảnh về 0
+
+        const hasAtLeastOneImage = session.scannedCount > 0;
+
+        if (session.status === 'PENDING_EXPERT' && hasAtLeastOneImage) {
+            setDefectDescription('Chờ thẩm định tổng quan từ Chuyên gia');
+
+            // Lấy tấm ảnh đầu tiên lên trước
+            if (session.imageUrls && session.imageUrls.length > 0) {
+                setImageUrl(session.imageUrls[0]);
+            } else {
+                setImageUrl('');
+            }
+
+            setCurrentStep(3);
+        } else {
+            setImageUrl('');
+            setCurrentStep(2);
         }
     };
 
-    // Chọn ảnh và bắn lên Cloudinary + AI Python
+    // 2. Tải ảnh từng tấm, gửi phân tích AI và tự động điều hướng luồng
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file || !sessionId) return;
+        if (!file || !activeSession) return;
+
+        // Hiển thị ảnh xem trước tạm thời tại client ngay lập tức
+        const localUrl = URL.createObjectURL(file);
+        setImageUrl(localUrl);
 
         setIsLoading(true);
         setErrorMessage('');
         try {
-            const res = await inspectionApi.uploadAndInspect(sessionId, file);
+            // 1. Bắn dữ liệu lên server phân tích ảnh
+            const successMessage = await qcApi.analyzeImage(activeSession.id, file);
+            alert(successMessage);
 
-            // Nhận link ảnh Cloudinary từ backend
-            setImageUrl(res.detail.imageUrl);
+            // 2. Đồng bộ lại danh sách mới nhất từ server sau khi up ảnh
+            const updatedList = await qcApi.getPendingSessions();
+            setPendingSessions(updatedList);
 
-            // Kiểm tra xem AI có báo FAILED ngay lập tức không (Lỗi sai linh kiện)
-            if (res.sessionStatus === 'FAILED') {
-                setDefectDescription(res.defectType);
-                setCurrentStep(4); // Nhảy thẳng đến màn hình kết quả thất bại
+            // Tìm thông tin đơn hiện tại trong danh sách mới cập nhật
+            const currentUpdatedSession = updatedList.find(s => s.id === activeSession.id);
+
+            // 🔥 KIỂM TRA ĐIỀU KIỆN LUỒNG TỰ ĐỘNG:
+            if (!currentUpdatedSession || ['PASSED', 'FAILED'].includes(currentUpdatedSession.status)) {
+                // Nếu thuộc luồng BASIC_AI và hệ thống đã tự động chốt kết quả xong
+                const finalStatus = currentUpdatedSession ? currentUpdatedSession.status : 'ĐÃ HOÀN THÀNH';
+                setDefectDescription(`Hệ thống tự động chốt kết quả cấu kiện thành công! Trạng thái: ${finalStatus}`);
+
+                // Đẩy THẲNG sang bước 4 hoàn tất hồ sơ, không qua duyệt tay chuyên gia
+                setCurrentStep(4);
             } else {
-                setCurrentStep(3); // Đúng linh kiện -> Chuyển sang bước con người vẽ lỗi
+                // Nếu đơn vẫn đang đợi xử lý tiếp (Chưa đủ ảnh hoặc thuộc gói PREMIUM)
+                setActiveSession(currentUpdatedSession);
+
+                if (currentUpdatedSession.status === 'PENDING_EXPERT') {
+                    // Đúng quy trình PREMIUM: Đủ ảnh -> Cập nhật URL ảnh thật từ server (nếu có) và qua Bước 3
+                    if ((currentUpdatedSession as any).imageUrl) {
+                        setImageUrl((currentUpdatedSession as any).imageUrl);
+                    }
+                    setDefectDescription('Đã quét đủ số lượng. Chờ thẩm định tổng quan từ Chuyên gia');
+                    setCurrentStep(3);
+                } else {
+                    // Chưa đủ ảnh: Giữ nguyên bước 2 để tiếp tục nạp ảnh tiếp theo
+                    setCurrentStep(2);
+                }
             }
         } catch (err: any) {
-            setErrorMessage('Quá trình phân tích ảnh bị lỗi. Vui lòng thử lại!');
+            const serverError = err.response?.data || 'Lỗi hệ thống khi phân tích ảnh AI!';
+            setErrorMessage(typeof serverError === 'string' ? serverError : 'Lỗi hệ thống khi xử lý ảnh!');
         } finally {
             setIsLoading(false);
+            if (e.target) e.target.value = '';
         }
     };
 
-    // Chốt kết quả kiểm định cuối cùng
+    // 3. Chốt kết quả thủ công tổng quan đơn hàng
     const handleFinalSubmit = async (status: 'PASSED' | 'FAILED') => {
-        if (!sessionId) return;
-        if (status === 'FAILED' && boxes.length === 0) {
-            alert('Vui lòng khoanh vùng ít nhất 1 vị trí lỗi hoặc bấm Chốt đạt!');
-            return;
-        }
+        if (!activeSession) return;
 
         setIsLoading(true);
         try {
-            const finalDesc = status === 'PASSED' ? 'Sản phẩm đạt tiêu chuẩn chất lượng' : defectDescription || 'Phát hiện lỗi bề mặt';
-            await inspectionApi.updateSessionStatus(sessionId, {
+            const note = defectDescription.trim() || (status === 'PASSED' ? 'Đạt chuẩn xuất xưởng' : 'Phát hiện khuyết tật bề mặt');
+
+            await qcApi.manualInspect(activeSession.id, {
                 status,
-                defectType: finalDesc,
-                boundingBoxes: status === 'PASSED' ? [] : boxes
+                overallNote: note
             });
-            setCurrentStep(4); // Hoàn thành quy trình
-        } catch (err) {
-            setErrorMessage('Không thể cập nhật kết quả kiểm định!');
+
+            setDefectDescription(`Chuyên gia đã kết luận: ${status === 'PASSED' ? 'ĐẠT CHUẨN' : 'BỊ LỖI'} (${note})`);
+            setCurrentStep(4);
+        } catch (err: any) {
+            setErrorMessage(err.response?.data || 'Lỗi khi chốt kết quả kiểm định thủ công!');
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Hủy phiên làm lại từ đầu
     const handleReset = () => {
-        setLotCode('');
-        setSessionId(null);
+        setActiveSession(null);
         setImageUrl('');
         setBoxes([]);
         setDefectDescription('');
         setCurrentStep(1);
+        fetchPending();
     };
 
-    // Hàm hoàn tác: cắt bỏ phần tử cuối cùng trong mảng các ô lỗi
     const handleUndo = () => {
-        if (boxes.length === 0) return;
-        setBoxes((prevBoxes) => prevBoxes.slice(0, -1));
+        if (boxes.length > 0) setBoxes((prev) => prev.slice(0, -1));
     };
 
-    // --- LOGIC VẼ KHUNG LỖI (MOUSE EVENTS) ---
-    const handleMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-        if (!containerRef.current || currentStep !== 3) return;
+    const getQueueBadge = (status: string) => {
+        if (status === 'PENDING_EXPERT') {
+            return <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/10">Chuyên Gia Xét Duyệt</span>;
+        }
+        return <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-600/10">Đang Quét AI</span>;
+    };
+
+    // --- CÁC HÀM XỬ LÝ VẼ KHUNG LỖI (BƯỚC 3) ---
+    const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        setIsDrawing(true);
         setStartPos({ x, y });
+        setIsDrawing(true);
         setActiveBox({ label: currentLabel, x, y, width: 0, height: 0 });
     };
 
-    const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-        if (!isDrawing || !activeBox) return;
-        const rect = containerRef.current!.getBoundingClientRect();
-        const currentX = e.clientX - rect.left;
-        const currentY = e.clientY - rect.top;
+    const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!isDrawing || !activeBox || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const currentX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const currentY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
 
         setActiveBox({
             ...activeBox,
             x: Math.min(startPos.x, currentX),
             y: Math.min(startPos.y, currentY),
-            width: Math.abs(startPos.x - currentX),
-            height: Math.abs(startPos.y - currentY),
+            width: Math.abs(currentX - startPos.x),
+            height: Math.abs(currentY - startPos.y),
         });
     };
 
     const handleMouseUp = () => {
-        if (isDrawing && activeBox) {
-            // Nếu người dùng kéo chuột tạo ra khung đủ lớn -> Lưu khung lỗi
-            if (activeBox.width > 5 && activeBox.height > 5) {
-                setBoxes([...boxes, activeBox]);
-            } else {
-                // Nếu người dùng chỉ click (không kéo chuột, khung < 5px) -> Mở Modal phóng to ảnh
-                setIsModalOpen(true);
-            }
-            setIsDrawing(false);
-            setActiveBox(null);
+        if (activeBox && activeBox.width > 5 && activeBox.height > 5) {
+            setBoxes([...boxes, activeBox]);
         }
+        setIsDrawing(false);
+        setActiveBox(null);
     };
 
     return (
-        <div className="w-full max-w-4xl bg-white shadow-xl rounded-xl p-8 border">
-            {/* Tiến trình thanh trạng thái (Steps Indicator) */}
-            <div className="flex justify-between items-center mb-8 border-b pb-4">
-                {[
-                    { step: 1, label: 'Khởi tạo phiên' },
-                    { step: 2, label: 'Quét AI linh kiện' },
-                    { step: 3, label: 'Nhân viên vẽ lỗi' },
-                    { step: 4, label: 'Hoàn tất' }
-                ].map((s) => (
-                    <div key={s.step} className="flex items-center gap-2">
-                        <span className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${currentStep >= s.step ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                            {s.step}
-                        </span>
-                        <span className={`text-sm font-medium ${currentStep === s.step ? 'text-blue-600 font-bold' : 'text-gray-400'}`}>{s.label}</span>
-                    </div>
-                ))}
-            </div>
+        <div className="min-h-screen bg-slate-50/50 py-10 antialiased font-sans">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-8">
 
-            {errorMessage && (
-                <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
-                    {errorMessage}
-                </div>
-            )}
-
-            {/* BƯỚC 1: KHỞI TẠO PHIÊN */}
-            {currentStep === 1 && (
-                <form onSubmit={handleCreateSession} className="space-y-6 max-w-md mx-auto py-6">
+                {/* --- TOP BAR HEADER --- */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                     <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Mã số Lô hàng (Lot Code):</label>
-                        <input
-                            type="text"
-                            required
-                            className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="Ví dụ: LÔ-ẮC-QUY-2026"
-                            value={lotCode}
-                            onChange={(e) => setLotCode(e.target.value)}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Chọn loại phụ tùng kiểm định:</label>
-                        <select
-                            className="w-full border rounded-lg p-2.5 bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                            value={selectedPartId}
-                            onChange={(e) => setSelectedPartId(Number(e.target.value))}
-                        >
-                            {parts.map(p => (
-                                <option key={p.id} value={p.id}>{p.partName} ({p.partCode})</option>
-                            ))}
-                        </select>
+                        <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
+                            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Không Gian Làm Việc QC</h1>
+                        </div>
+                        <p className="text-slate-500 text-xs mt-0.5">Hệ thống trạm phân tích khuyết tật và chẩn đoán linh kiện thông minh</p>
                     </div>
                     <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition"
+                        onClick={handleLogout}
+                        className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 hover:text-red-600 transition-colors duration-200"
                     >
-                        {isLoading ? 'Đang tạo...' : 'Bắt đầu phiên kiểm định'}
+                        Đăng xuất hệ thống
                     </button>
-                </form>
-            )}
-
-            {/* BƯỚC 2: TẢI ẢNH VÀ QUÉT AI */}
-            {currentStep === 2 && (
-                <div className="text-center py-10 space-y-4">
-                    <div className="text-gray-600 font-medium">Phiên đã mở thành công (ID: {sessionId}). Vui lòng nạp ảnh chụp phụ tùng:</div>
-                    <label className={`inline-block px-6 py-3 bg-purple-600 text-white font-bold rounded-lg cursor-pointer hover:bg-purple-700 transition ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
-                        {isLoading ? 'Hệ thống AI đang phân tích ảnh...' : 'Chọn ảnh hoặc Chụp hình'}
-                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                    </label>
                 </div>
-            )}
 
-            {/* BƯỚC 3: CON NGƯỜI VẼ LỖI (HUMAN-IN-THE-LOOP) */}
-            {currentStep === 3 && (
-                <div className="space-y-6">
-                    {/* Thanh công cụ điều khiển thông minh */}
-                    <div className="flex flex-wrap gap-4 items-center justify-between bg-green-50 text-green-800 p-4 rounded-xl text-sm font-semibold border border-green-200 shadow-sm">
-                        <span>✓ AI xác nhận: Đúng linh kiện. Tiến hành khoanh vùng lỗi.</span>
-
-                        <div className="flex items-center gap-3">
-                            {/* Chọn nhãn vẽ */}
-                            <div className="flex bg-white rounded-lg p-1 border shadow-sm">
-                                <button
-                                    type="button" onClick={() => setCurrentLabel('scratch')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${currentLabel === 'scratch' ? 'bg-amber-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>Vết Xước</button>
-                                <button type="button" onClick={() => setCurrentLabel('crack')} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${currentLabel === 'crack' ? 'bg-red-500 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}> Vết Nứt</button>
-                            </div>
-
-                            {/* Lớp điều khiển tác vụ (Hoàn tác / Xóa sạch) */}
-                            <div className="flex gap-2 border-l pl-3 border-green-300">
-                                <button
-                                    type="button"
-                                    onClick={handleUndo}
-                                    disabled={boxes.length === 0}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1 transition-all border ${boxes.length === 0
-                                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:scale-95'
-                                        }`}
-                                    title="Xóa khung vừa vẽ gần nhất"
-                                >
-                                    <span>↩</span> Hoàn tác
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setBoxes([])}
-                                    disabled={boxes.length === 0}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1 transition-all border ${boxes.length === 0
-                                        ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                        : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 active:scale-95'
-                                        }`}
-                                >
-                                    <span>🗑️</span> Xóa hết
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* CỬA SỔ MODAL FULL MÀN HÌNH (Chỉ dùng để SOI) */}
-                    {isModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4">
-                            <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="absolute top-5 right-5 text-white bg-red-600 px-4 py-2 rounded-full font-bold hover:bg-red-700"
-                            >
-                                X
-                            </button>
-                            <img
-                                src={imageUrl}
-                                alt="Phóng to"
-                                className="max-w-[95vw] max-h-[95vh] object-contain cursor-zoom-out"
-                                onClick={() => setIsModalOpen(false)}
-                            />
-                        </div>
-                        
-                    )}
-
-                    {/* ẢNH GỐC ĐỂ VẼ (Nhỏ hơn, thao tác vẽ tại đây) */}
-                    <div className="relative border border-gray-300 rounded-xl bg-gray-100 w-full flex justify-center p-4">
-                        <img
-                            src={imageUrl}
-                            alt="Click để phóng to"
-                            className="max-h-[400px] cursor-pointer hover:opacity-90 transition-opacity"
-                            onClick={() => setIsModalOpen(true)}
-                            title="Click để phóng to ảnh"
-                        />
-                        {/* Vẫn giữ nguyên logic vẽ bounding box chồng lên trên ảnh nhỏ này... */}
-                        <div
-                            ref={containerRef}
-                            className="absolute inset-0 z-10 cursor-crosshair"
-                            onMouseDown={handleMouseDown}
-                            onMouseMove={handleMouseMove}
-                            onMouseUp={handleMouseUp}
-                        >
-                            {boxes.map((b, idx) => (
-                                <div key={idx} className={`absolute border-2 ${b.label === 'scratch' ? 'border-amber-500 bg-amber-500/10' : 'border-red-500 bg-red-500/10'}`} style={{ left: b.x, top: b.y, width: b.width, height: b.height }}>
-                                    <span className={`absolute -top-5 left-0 text-white text-[10px] px-1 rounded font-bold ${b.label === 'scratch' ? 'bg-amber-500' : 'bg-red-500'}`}>
-                                        {b.label === 'scratch' ? 'Xước' : 'Nứt'}
+                {/* --- STEPS COMPONENT --- */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative">
+                        {[
+                            { step: 1, label: 'Hàng chờ nhận ca' },
+                            { step: 2, label: 'Tải ảnh & Quét AI' },
+                            { step: 3, label: 'Chuyên gia phê duyệt' },
+                            { step: 4, label: 'Hoàn tất hồ sơ' }
+                        ].map((s) => (
+                            <div key={s.step} className="flex flex-col gap-2 relative">
+                                <div className="flex items-center gap-2.5">
+                                    <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-mono text-xs font-bold transition-all duration-300 ${currentStep >= s.step ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-100' : 'bg-slate-100 text-slate-400'}`}>
+                                        {s.step}
+                                    </span>
+                                    <span className={`text-xs font-semibold tracking-wide transition-colors duration-200 ${currentStep === s.step ? 'text-indigo-600 font-bold' : 'text-slate-400'}`}>
+                                        {s.label}
                                     </span>
                                 </div>
-                            ))}
-                            {isDrawing && activeBox && (
-                                <div className={`absolute border-2 border-dashed ${currentLabel === 'scratch' ? 'border-amber-400 bg-amber-400/20' : 'border-red-400 bg-red-400/20'}`} style={{ left: activeBox.x, top: activeBox.y, width: activeBox.width, height: activeBox.height }} />
-                            )}
-                        </div>
+                                <div className={`h-1 w-full rounded-full transition-all duration-500 mt-1 ${currentStep >= s.step ? 'bg-indigo-600' : 'bg-slate-100'}`} />
+                            </div>
+                        ))}
                     </div>
+                </div>
 
-                    {/* Nhập thông tin chi tiết báo cáo lỗi */}
-                    {boxes.length > 0 && (
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-1">Mô tả tổng quát khuyết tật (In phiếu kiểm định):</label>
-                            <input
-                                type="text"
-                                className="w-full border rounded-lg p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                                placeholder="Ví dụ: Phát hiện nứt chân van và xước sâu vỏ kim loại..."
-                                value={defectDescription}
-                                onChange={(e) => setDefectDescription(e.target.value)}
-                            />
+                {errorMessage && (
+                    <div className="p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-2xl text-xs font-semibold shadow-sm flex items-center gap-2">
+                        <span>⚠️ {errorMessage}</span>
+                    </div>
+                )}
+
+                {/* --- WORKSPACE CORE --- */}
+                <div className="transition-all duration-300">
+
+                    {/* BƯỚC 1: HÀNG CHỜ LINH KIỆN */}
+                    {currentStep === 1 && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <div>
+                                    <h2 className="text-sm font-bold text-slate-900">Danh sách chờ kiểm định</h2>
+                                    <p className="text-xs text-slate-400 mt-0.5">Các lô hàng đã thanh toán, sẵn sàng đưa vào luồng phân tích</p>
+                                </div>
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                    Đang đợi: {pendingSessions.length} đơn
+                                </span>
+                            </div>
+
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold text-slate-400 tracking-wider uppercase">
+                                            <th className="p-4">Mã Đơn / Lô</th>
+                                            <th className="p-4">Tên cấu kiện / Quy cách</th>
+                                            <th className="p-4">Tiến độ nạp ảnh</th>
+                                            <th className="p-4">Phân luồng hiện tại</th>
+                                            <th className="p-4 text-right">Thao tác</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-xs">
+                                        {pendingSessions.filter(session => session.paymentStatus === 'PAID' && ['PENDING', 'PENDING_EXPERT'].includes(session.status)).length === 0 ? (
+                                            <tr>
+                                                <td colSpan={5} className="p-12 text-center text-slate-400 bg-white font-medium">
+                                                    <div className="max-w-xs mx-auto space-y-2">
+                                                        <p className="text-sm font-semibold text-slate-700">Trống danh sách hàng đợi</p>
+                                                        <p className="text-xs text-slate-400">Hiện tại không có đơn hàng nào cần tiếp nhận xử lý bổ sung. Xin vui lòng nghỉ ngơi! ☕</p>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            pendingSessions
+                                                .filter(session => session.paymentStatus === 'PAID' && ['PENDING', 'PENDING_EXPERT'].includes(session.status))
+                                                .map(session => (
+                                                    <tr key={session.id} className="hover:bg-slate-50/80 transition-colors duration-150">
+                                                        <td className="p-4 font-bold text-slate-800">
+                                                            <span className="text-slate-400 font-mono font-medium">#{session.id}</span> — {session.lotCode}
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="font-semibold text-slate-700">{session.partName}</div>
+                                                            <div className="text-[10px] text-slate-400 mt-0.5">Số lượng: {session.quantity} mẫu</div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-mono font-bold text-indigo-600 bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100/50">
+                                                                    {session.scannedCount} / {session.quantity}
+                                                                </span>
+                                                                <span className="text-slate-400 text-[10px]">ảnh</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            <div className="flex flex-col gap-1.5 items-start">
+                                                                {getQueueBadge(session.status)}
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">💰 PAID</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-right">
+                                                            <button
+                                                                onClick={() => handleSelectSession(session)}
+                                                                className="inline-flex items-center justify-center px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 shadow-sm shadow-indigo-100 transition duration-150"
+                                                            >
+                                                                Tiếp nhận ca
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     )}
 
-                    {/* Thanh chốt nút bấm điều hướng */}
-                    <div className="flex justify-end gap-4 border-t pt-4">
-                        <button onClick={() => handleFinalSubmit('PASSED')} disabled={boxes.length > 0} className={`px-5 py-2 rounded-lg font-bold text-sm text-white ${boxes.length > 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>Chốt Đạt (PASSED)</button>
-                        <button onClick={() => handleFinalSubmit('FAILED')} disabled={boxes.length === 0} className={`px-5 py-2 rounded-lg font-bold text-sm text-white ${boxes.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-rose-600 hover:bg-rose-700'}`}>Chốt Lỗi (FAILED)</button>
-                    </div>
-                </div>
-            )}
+                    {/* BƯỚC 2: TẢI ẢNH TỪNG TẤM */}
+                    {currentStep === 2 && (
+                        <div className="bg-white p-8 rounded-2xl shadow-sm text-center border border-slate-100 max-w-lg mx-auto space-y-6">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-900">Bước 2: Tải ảnh linh kiện & Trích xuất AI</h3>
+                                <p className="text-xs text-slate-400 mt-1">Vui lòng nạp hình ảnh sắc nét của cấu kiện cơ khí để chạy quét khuyết tật bằng AI</p>
+                            </div>
 
-            {/* BƯỚC 4: HOÀN TẤT VÀ IN BÁO CÁO KẾT QUẢ */}
-            {currentStep === 4 && (
-                <div className="text-center py-8 space-y-6">
-                    <div className="text-2xl font-extrabold text-blue-900">Quy Trình Kiểm Định Kết Thúc!</div>
-                    <div className="p-4 bg-gray-50 rounded-lg max-w-md mx-auto text-left text-sm space-y-2 border">
-                        <div><strong>Mã phiên:</strong> #{sessionId}</div>
-                        <div><strong>Lô hàng:</strong> {lotCode}</div>
-                        <div><strong>Kết luận:</strong> {boxes.length > 0 || defectDescription.includes('sai linh kiện') ? <span className="text-red-600 font-bold">KHÔNG ĐẠT TIÊU CHUẨN (FAILED)</span> : <span className="text-green-600 font-bold">ĐẠT TIÊU CHUẨN (PASSED)</span>}</div>
-                        {defectDescription && <div><strong>Chi tiết lỗi:</strong> {defectDescription}</div>}
-                        {boxes.length > 0 && <div><strong>Số điểm lỗi khoanh vùng:</strong> {boxes.length} vị trí</div>}
-                    </div>
-                    <button onClick={handleReset} className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition">Thực hiện lượt kiểm định mới</button>
+                            <div className="p-6 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-slate-50 transition flex flex-col items-center justify-center gap-3">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageUpload} // ◄ Đã bind chuẩn hàm tải ảnh kèm quét AI tự động chuyển bước
+                                    className="text-xs font-medium text-slate-600 cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100"
+                                    disabled={isLoading}
+                                />
+                            </div>
+
+                            {imageUrl && (
+                                <div className="space-y-2">
+                                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block text-left">Ảnh vừa nạp thành công:</span>
+                                    <img src={imageUrl} alt="Preview" className="max-h-48 object-contain rounded-xl mx-auto border border-slate-100 shadow-sm" />
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                                <button onClick={handleReset} className="px-4 py-2 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+                                    Quay lại trạm chờ
+                                </button>
+                                <button
+                                    disabled={!imageUrl || isLoading}
+                                    onClick={() => setCurrentStep(3)}
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 hover:bg-indigo-700 transition"
+                                >
+                                    Tiến sang Chuyên Gia Phê Duyệt ➔
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* BƯỚC 3: PHÊ DUYỆT TỪ CHUYÊN GIA */}
+                    {currentStep === 3 && activeSession && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden max-w-4xl mx-auto">
+                            {/* ... giữ nguyên phần header của bước 3 ... */}
+
+                            <div className="p-6 space-y-6">
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Đánh dấu vùng khuyết tật trên linh kiện</label>
+                                        {/* ... giữ nguyên thanh chọn loại lỗi scratch / crack ... */}
+                                    </div>
+
+                                    {/* 🔥 THÊM ĐOẠN NÀY: THANH CHUYỂN ĐỔI QUA LẠI GIỮA CÁC ẢNH */}
+                                    {activeSession.imageUrls && activeSession.imageUrls.length > 1 && (
+                                        <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl border border-slate-200/60">
+                                            <button
+                                                type="button"
+                                                disabled={currentImgIndex === 0}
+                                                onClick={() => {
+                                                    const newIdx = currentImgIndex - 1;
+                                                    setCurrentImgIndex(newIdx);
+                                                    setImageUrl(activeSession.imageUrls![newIdx]);
+                                                    setBoxes([]); // Clear vết vẽ cũ khi chuyển ảnh
+                                                }}
+                                                className="px-3 py-1.5 text-xs font-bold bg-white text-slate-700 rounded-lg shadow-sm disabled:opacity-40 hover:bg-slate-50 transition"
+                                            >
+                                                ◀ Ảnh trước
+                                            </button>
+
+                                            <span className="text-xs font-bold text-indigo-600 font-mono bg-indigo-50 px-3 py-1 rounded-md border border-indigo-100">
+                                                Hiển thị: Ảnh {currentImgIndex + 1} / {activeSession.imageUrls.length}
+                                            </span>
+
+                                            <button
+                                                type="button"
+                                                disabled={currentImgIndex === activeSession.imageUrls.length - 1}
+                                                onClick={() => {
+                                                    const newIdx = currentImgIndex + 1;
+                                                    setCurrentImgIndex(newIdx);
+                                                    setImageUrl(activeSession.imageUrls![newIdx]);
+                                                    setBoxes([]); // Clear vết vẽ cũ khi chuyển ảnh
+                                                }}
+                                                className="px-3 py-1.5 text-xs font-bold bg-white text-slate-700 rounded-lg shadow-sm disabled:opacity-40 hover:bg-slate-50 transition"
+                                            >
+                                                Ảnh sau ▶
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Màn hình Canvas chứa ảnh nền để vẽ (Giữ nguyên) */}
+                                    <div
+                                        ref={containerRef}
+                                        className="relative w-full h-[450px] bg-slate-900 rounded-xl overflow-hidden cursor-crosshair border-2 border-slate-200 shadow-inner"
+                                        onMouseDown={handleMouseDown}
+                                        onMouseMove={handleMouseMove}
+                                        onMouseUp={handleMouseUp}
+                                        onMouseLeave={handleMouseUp}
+                                        style={{
+                                            backgroundImage: imageUrl ? `url(${imageUrl})` : 'none',
+                                            backgroundSize: 'contain',
+                                            backgroundRepeat: 'no-repeat',
+                                            backgroundPosition: 'center'
+                                        }}
+                                    >
+                                        {!imageUrl && (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs font-medium gap-2">
+                                                <span>⚠️ Chưa load được hình ảnh linh kiện từ phiên làm việc này</span>
+                                                <span className="text-[10px] text-slate-500">(Hãy chắc chắn rằng ca đã được nạp hình ảnh trước đó hoặc từ Bước 2)</span>
+                                            </div>
+                                        )}
+
+                                        {/* Hiển thị các hộp đã vẽ */}
+                                        {boxes.map((box, idx) => (
+                                            <div
+                                                key={idx}
+                                                className={`absolute border-2 ${box.label === 'scratch' ? 'border-indigo-500 bg-indigo-500/20' : 'border-rose-500 bg-rose-500/20'}`}
+                                                style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
+                                            >
+                                                <span className={`absolute -top-5 left-0 px-1.5 py-0.5 text-[10px] text-white font-bold rounded-t-md ${box.label === 'scratch' ? 'bg-indigo-500' : 'bg-rose-500'}`}>
+                                                    {box.label === 'scratch' ? 'Xước' : 'Nứt'}
+                                                </span>
+                                            </div>
+                                        ))}
+
+                                        {/* Hộp nét đứt đang trong quá trình kéo chuột */}
+                                        {activeBox && (
+                                            <div
+                                                className={`absolute border-2 border-dashed ${activeBox.label === 'scratch' ? 'border-indigo-400 bg-indigo-400/30' : 'border-rose-400 bg-rose-400/30'}`}
+                                                style={{ left: activeBox.x, top: activeBox.y, width: activeBox.width, height: activeBox.height }}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Nhận xét & Kết luận kỹ thuật tổng hợp</label>
+                                    <textarea
+                                        className="w-full border border-slate-200 rounded-xl p-3 text-xs outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-slate-50/50 font-medium text-slate-700 transition"
+                                        rows={3}
+                                        placeholder="Nhập ghi chú vận hành tổng quan cho lô phụ tùng này..."
+                                        value={defectDescription}
+                                        onChange={(e) => setDefectDescription(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-slate-100">
+                                    <button onClick={handleReset} className="px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+                                        Hủy ca làm việc
+                                    </button>
+                                    <button onClick={() => handleFinalSubmit('PASSED')} disabled={isLoading} className="px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-sm shadow-emerald-100 bg-emerald-600 hover:bg-emerald-700 transition">
+                                        ✅ Ký duyệt ĐẠT (PASSED)
+                                    </button>
+                                    <button onClick={() => handleFinalSubmit('FAILED')} disabled={isLoading} className="px-5 py-2.5 rounded-xl font-bold text-xs text-white shadow-sm shadow-rose-100 bg-rose-600 hover:bg-rose-700 transition">
+                                        🚨 Ký huỷ LÔ LỖI (FAILED)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* BƯỚC 4: HOÀN TẤT HỒ SƠ CHỐT KẾT QUẢ */}
+                    {currentStep === 4 && (
+                        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-8 max-w-md mx-auto text-center space-y-6">
+                            <div className="space-y-2">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xl">
+                                    ✓
+                                </div>
+                                <h3 className="text-base font-bold text-slate-900">Hồ sơ đã ký chốt thành công!</h3>
+                                <p className="text-xs text-slate-400">Dữ liệu kiểm định của lô linh kiện đã được đóng băng gửi về máy chủ</p>
+                            </div>
+
+                            <div className="p-4 bg-slate-50 rounded-xl text-left text-xs space-y-2.5 border border-slate-100 font-medium">
+                                <div className="flex justify-between border-b border-slate-200/60 pb-1.5"><span className="text-slate-400">Mã vận đơn lô:</span> <span className="font-bold text-slate-800">{activeSession?.lotCode}</span></div>
+                                <div className="flex justify-between border-b border-slate-200/60 pb-1.5"><span className="text-slate-400">Cấu kiện cơ khí:</span> <span className="font-bold text-slate-800">{activeSession?.partName}</span></div>
+                                <div className="space-y-1">
+                                    <span className="text-slate-400 block">Biên bản chốt vận hành:</span>
+                                    <div className="p-2 bg-white rounded border border-slate-100 font-semibold text-indigo-700 leading-relaxed text-[11px]">
+                                        {defectDescription}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleReset}
+                                className="w-full py-3 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-100 transition duration-150"
+                            >
+                                Tiếp tục tiếp nhận đơn tiếp theo
+                            </button>
+                        </div>
+                    )}
+
                 </div>
-            )}
+            </div>
         </div>
     );
 };
