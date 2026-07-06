@@ -26,76 +26,98 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/auth")
 public class AuthController {
 
-	private final AuthenticationManager authenticationManager;
-	private final JwtService jwtService;
-	private final UserRepository userRepository;
-	private final RoleRepository roleRepository;
-	private final PasswordEncoder passwordEncoder;
+    private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
 
-	public AuthController(
-			AuthenticationManager authenticationManager,
-			JwtService jwtService,
-			UserRepository userRepository,
-			RoleRepository roleRepository,
-			PasswordEncoder passwordEncoder
-	) {
-		this.authenticationManager = authenticationManager;
-		this.jwtService = jwtService;
-		this.userRepository = userRepository;
-		this.roleRepository = roleRepository;
-		this.passwordEncoder = passwordEncoder;
-	}
+    public AuthController(
+            AuthenticationManager authenticationManager,
+            JwtService jwtService,
+            UserRepository userRepository,
+            RoleRepository roleRepository,
+            PasswordEncoder passwordEncoder
+    ) {
+        this.authenticationManager = authenticationManager;
+        this.jwtService = jwtService;
+        this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
 
-	@PostMapping("/register")
-	@ResponseStatus(HttpStatus.CREATED)
-	public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
-		if (userRepository.existsByUsername(request.username())) {
-			throw new IllegalArgumentException("Username already exists");
-		}
+    @PostMapping("/register")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
 
-		RoleName roleName;
-		if (request.role() == null || request.role().isBlank()) {
-			roleName = RoleName.STAFF;
-		} else {
-			try {
-				roleName = RoleName.valueOf(request.role().trim().toUpperCase());
-			} catch (IllegalArgumentException ex) {
-				throw new IllegalArgumentException("Invalid role. Allowed: ADMIN, MANAGER, STAFF, SUPPLIER");
-			}
-		}
+        // 1. Validate Username
+        if (userRepository.existsByUsername(request.username())) {
+            throw new IllegalArgumentException("Tên đăng nhập đã tồn tại trong hệ thống!");
+        }
 
-		Role role = roleRepository.findByName(roleName)
-				.orElseThrow(() -> new IllegalStateException("Role not found: " + roleName));
+        // 2. 🔥 Validate Email (Chỉ check nếu khách hàng có nhập email)
+        if (request.email() != null && !request.email().isBlank()) {
+            if (userRepository.existsByEmail(request.email())) {
+                throw new IllegalArgumentException("Email này đã được sử dụng cho một tài khoản khác!");
+            }
+        }
 
-		AppUser user = AppUser.builder()
-				.username(request.username())
-				.password(passwordEncoder.encode(request.password()))
-				.build();
-		user.getRoles().add(role);
+        // 3. 🔥 Validate Mã số thuế (Tùy chọn: Chặn 1 doanh nghiệp tạo nhiều acc nếu cần)
+        if (request.taxCode() != null && !request.taxCode().isBlank()) {
+            if (userRepository.existsByTaxCode(request.taxCode())) {
+                throw new IllegalArgumentException("Mã số thuế này đã được đăng ký!");
+            }
+        }
 
-		userRepository.save(user);
+        RoleName roleName;
+        if (request.role() == null || request.role().isBlank()) {
+            roleName = RoleName.CUSTOMER;
+        } else {
+            try {
+                roleName = RoleName.valueOf(request.role().trim().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException("Quyền không hợp lệ. Chỉ chấp nhận: ADMIN, QC, CUSTOMER");
+            }
+        }
 
-		Authentication authentication = authenticationManager.authenticate(
-				new UsernamePasswordAuthenticationToken(request.username(), request.password())
-		);
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new IllegalStateException("Không tìm thấy quyền: " + roleName));
 
-		return toAuthResponse(authentication);
-	}
+        AppUser user = AppUser.builder()
+                .username(request.username())
+                .password(passwordEncoder.encode(request.password()))
+                .companyName(request.companyName())
+                .fullName(request.fullName())
+                .email(request.email())
+                .phoneNumber(request.phoneNumber())
+                .taxCode(request.taxCode())
+                .address(request.address())
+                .build();
 
-	@PostMapping("/login")
-	public AuthResponse login(@Valid @RequestBody LoginRequest request) {
-		Authentication authentication = authenticationManager.authenticate(
-				new UsernamePasswordAuthenticationToken(request.username(), request.password())
-		);
-		return toAuthResponse(authentication);
-	}
+        user.getRoles().add(role);
+        userRepository.save(user);
 
-	private AuthResponse toAuthResponse(Authentication authentication) {
-		UserDetails principal = (UserDetails) authentication.getPrincipal();
-		String token = jwtService.generateToken(principal);
-		Set<String> roles = principal.getAuthorities().stream()
-				.map(GrantedAuthority::getAuthority)
-				.collect(Collectors.toSet());
-		return new AuthResponse(token, "Bearer", principal.getUsername(), roles);
-	}
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.username(), request.password())
+        );
+
+        return toAuthResponse(authentication);
+    }
+
+    @PostMapping("/login")
+    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.username(), request.password())
+        );
+        return toAuthResponse(authentication);
+    }
+
+    private AuthResponse toAuthResponse(Authentication authentication) {
+        UserDetails principal = (UserDetails) authentication.getPrincipal();
+        String token = jwtService.generateToken(principal);
+        Set<String> roles = principal.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toSet());
+        return new AuthResponse(token, "Bearer", principal.getUsername(), roles);
+    }
 }

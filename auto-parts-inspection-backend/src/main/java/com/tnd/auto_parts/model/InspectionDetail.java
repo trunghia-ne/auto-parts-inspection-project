@@ -1,32 +1,39 @@
 package com.tnd.auto_parts.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "inspection_details")
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
+@Getter
+@Setter
 public class InspectionDetail {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    // Liên kết ngược về bảng InspectionSession cha
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "session_id", nullable = false)
+    @JsonIgnore // Tránh lỗi vòng lặp vô hạn khi Spring trả về JSON cho React
     private InspectionSession session;
 
-    @Column(nullable = false)
-    private String imagePath;
+    // Tên file ảnh hoặc link ảnh gốc/ảnh kết quả sau khi AI vẽ khung
+    @Column(name = "image_url")
+    private String imageUrl;
 
-    @Column(nullable = false)
-    private LocalDateTime createdAt;
+    // Loại lỗi của riêng sản phẩm này (Ví dụ: "Nứt", "Móp", "OK"...)
+    @Column(name = "defect_type")
+    private String defectType;
+
+    // Tọa độ các ô khung lỗi nhận diện từ Python AI
+    @Column(name = "bounding_boxes", columnDefinition = "TEXT")
+    private String boundingBoxes;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

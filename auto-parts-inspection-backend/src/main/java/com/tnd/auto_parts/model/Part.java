@@ -29,4 +29,7 @@ public class Part {
 
     @Column(name = "ai_class_id", unique = true)
     private Integer aiClassId;
+
+    @Column(name = "price")
+    private Double price; // Giá dịch vụ kiểm định của phụ tùng này
 }
