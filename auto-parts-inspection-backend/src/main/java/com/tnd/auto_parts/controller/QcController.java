@@ -27,17 +27,20 @@ public class QcController {
     private final InspectionDetailRepository detailRepo; // Thêm repo này
     private final AiClientService aiClientService;
     private final CloudinaryService cloudinaryService;
+    private final com.tnd.auto_parts.service.InspectionStatusLogService statusLogService;
 
     private static final double AI_CONFIDENCE_THRESHOLD = 0.85;
 
     public QcController(InspectionSessionRepository sessionRepo,
                         InspectionDetailRepository detailRepo,
                         AiClientService aiClientService,
-                        CloudinaryService cloudinaryService) {
+                        CloudinaryService cloudinaryService,
+                        com.tnd.auto_parts.service.InspectionStatusLogService statusLogService) {
         this.sessionRepo = sessionRepo;
         this.detailRepo = detailRepo;
         this.aiClientService = aiClientService;
         this.cloudinaryService = cloudinaryService;
+        this.statusLogService = statusLogService;
     }
 
     // 1. LẤY DANH SÁCH CHỜ
@@ -117,12 +120,15 @@ public class QcController {
             if (totalScanned >= session.getQuantity()) {
                 if ("PREMIUM_EXPERT".equalsIgnoreCase(session.getPackageType())) {
                     session.setStatus(InspectionStatus.PENDING_EXPERT);
+                    statusLogService.logStatusChange(session, InspectionStatus.PENDING_EXPERT, "Đã quét đủ " + session.getQuantity() + " sản phẩm. Chờ QC thẩm định thủ công.");
                 } else {
                     // Logic BASIC: Kiểm tra xem trong toàn bộ các ảnh đã quét, có ảnh nào bị lỗi không?
                     boolean isAnyDefect = session.getDetails().stream()
                             .anyMatch(d -> !d.getDefectType().contains("duyệt sạch")) || !isAiClean;
 
-                    session.setStatus(isAnyDefect ? InspectionStatus.FAILED : InspectionStatus.PASSED);
+                    InspectionStatus newStatus = isAnyDefect ? InspectionStatus.FAILED : InspectionStatus.PASSED;
+                    session.setStatus(newStatus);
+                    statusLogService.logStatusChange(session, newStatus, "AI hoàn tất phân tích (" + (isAnyDefect ? "Phát hiện lỗi" : "Đạt chất lượng") + ").");
                 }
                 sessionRepo.save(session);
             }
@@ -151,6 +157,7 @@ public class QcController {
         try {
             InspectionStatus status = InspectionStatus.valueOf(request.status().toUpperCase());
             session.setStatus(status);
+            statusLogService.logStatusChange(session, status, "QC đánh giá thủ công: " + request.overallNote());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body("Trạng thái không hợp lệ (PASSED/FAILED).");
         }
