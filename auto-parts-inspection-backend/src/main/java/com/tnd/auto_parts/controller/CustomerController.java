@@ -26,13 +26,16 @@ public class CustomerController {
     private final InspectionSessionRepository sessionRepo;
     private final PartRepository partRepo;
     private final UserRepository userRepo;
+    private final com.tnd.auto_parts.service.InspectionStatusLogService statusLogService;
+
     @Autowired
     private VNPayService vnPayService;
 
-    public CustomerController(InspectionSessionRepository sessionRepo, PartRepository partRepo, UserRepository userRepo) {
+    public CustomerController(InspectionSessionRepository sessionRepo, PartRepository partRepo, UserRepository userRepo, com.tnd.auto_parts.service.InspectionStatusLogService statusLogService) {
         this.sessionRepo = sessionRepo;
         this.partRepo = partRepo;
         this.userRepo = userRepo;
+        this.statusLogService = statusLogService;
     }
 
     @GetMapping("/parts")
@@ -112,6 +115,23 @@ public class CustomerController {
         return ResponseEntity.ok(fullDetail);
     }
 
+    @GetMapping("/{id}/logs")
+    public ResponseEntity<?> getSessionLogs(@PathVariable Long id, @AuthenticationPrincipal UserDetails userDetails) {
+        AppUser currentUser = userRepo.findByUsername(userDetails.getUsername()).orElseThrow();
+        InspectionSession session = sessionRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn kiểm định mang ID: " + id));
+
+        boolean isAdmin = userDetails.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (!isAdmin && !session.getCustomer().getId().equals(currentUser.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Bảo mật: Bạn không có quyền truy cập vào lịch sử của đơn hàng này!");
+        }
+
+        return ResponseEntity.ok(statusLogService.getSessionLogs(id));
+    }
+
     /**
      * API 3: Khách tạo đơn kiểm định mới
      */
@@ -142,6 +162,7 @@ public class CustomerController {
                 .build();
 
         sessionRepo.save(session);
+        statusLogService.logStatusChange(session, InspectionStatus.PENDING, "Khởi tạo đơn kiểm định mới");
 
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Tạo đơn thành công!");
