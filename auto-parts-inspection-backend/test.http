@@ -1,0 +1,174 @@
+### =====================================================================
+### CẤU HÌNH BIẾN MÔI TRƯỜNG CHUNG
+### =====================================================================
+@host = http://localhost:8080
+
+
+### =====================================================================
+### 0. ĐĂNG NHẬP TỰ ĐỘNG ĐỂ LẤY TOKEN
+### (Bấm nút Play ▶ chạy 3 cái này trước để nạp token vào hệ thống)
+### =====================================================================
+
+### 0.1 Đăng nhập lấy Token cho CUSTOMER
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "trunghiane",
+  "password": "nghia2k4"
+}
+
+> {%
+    client.global.set("customer_token", response.body.token);
+%}
+
+### 0.2 Đăng nhập lấy Token cho QC (Chuyên gia)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "qc_staff",
+  "password": "password123"
+}
+
+> {%
+    client.global.set("qc_token", response.body.token);
+%}
+
+### 0.3 Đăng nhập lấy Token cho ADMIN
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123"
+}
+
+> {%
+    client.global.set("admin_token", response.body.token);
+%}
+
+
+### =====================================================================
+### 1. LUỒNG GÓI CƠ BẢN (BASIC_AI) + THANH TOÁN VNPAY
+### Luồng: Tạo đơn (UNPAID) -> Thanh toán VNPay -> Quét AI tự đóng đơn.
+### =====================================================================
+
+### 1.1 [CUSTOMER] Tạo đơn gói Cơ Bản (Giảm 50% giá) -> Lấy trường 'paymentUrl' trả về để test
+POST {{host}}/api/customer/sessions
+Authorization: Bearer {{customer_token}}
+Content-Type: application/json
+
+{
+  "partId": 1,
+  "quantity": 2,
+  "lotCode": "LOT-BASIC-101",
+  "packageType": "BASIC_AI"
+}
+
+### 1.2 [VNPAY GIẢ LẬP] Bác có thể tự kích hoạt bằng cách gọi link này (Nếu không dùng trình duyệt)
+# Điền chính xác id đơn vừa tạo (ví dụ đơn số 3) thay vào chỗ vnp_TxnRef=3_xxx
+GET {{host}}/api/public/vnpay/ipn?vnp_ResponseCode=00&vnp_TxnRef8_123456
+
+### 1.3a [QC] Quét AI cho sản phẩm thứ 1/2
+POST {{host}}/api/qc/sessions/3/analyze
+Authorization: Bearer {{qc_token}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="test1.jpg"
+Content-Type: image/jpg
+
+< E:\data set\train\AIR COMPRESSOR\002.jpg
+--WebAppBoundary
+Content-Disposition: form-data; name="boundingBoxes"
+
+[{"top":"10%","left":"20%"}]
+--WebAppBoundary--
+
+### 1.3b [QC] Quét AI cho sản phẩm thứ 2/2 (Hệ thống tự chốt đơn)
+POST {{host}}/api/qc/sessions/3/analyze
+Authorization: Bearer {{qc_token}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="test2.jpg"
+Content-Type: image/jpg
+
+< E:\data set\train\AIR COMPRESSOR\013.jpg
+--WebAppBoundary--
+
+
+### =====================================================================
+### 2. LUỒNG GÓI NÂNG CAO (PREMIUM_EXPERT) + THANH TOÁN VNPAY
+### Luồng: Tạo đơn (Giá gốc) -> Thanh toán VNPay -> Quét ảnh -> Chuyên gia chốt đơn.
+### =====================================================================
+
+### 2.1 [CUSTOMER] Tạo đơn gói Chuyên Sâu (Giữ nguyên giá gốc) -> Giữ Ctrl + Click vào 'paymentUrl' để nhập thẻ NCB
+POST {{host}}/api/customer/sessions
+Authorization: Bearer {{customer_token}}
+Content-Type: application/json
+
+{
+  "partId": 1,
+  "quantity": 2,
+  "lotCode": "LOT-VIP-888",
+  "packageType": "PREMIUM_EXPERT"
+}
+
+### 2.2 [VNPAY GIẢ LẬP] Kích hoạt nhanh trạng thái PAID cho đơn số 4 (Nếu không muốn gõ thẻ trên web)
+GET {{host}}/api/public/vnpay/ipn?vnp_ResponseCode=00&vnp_TxnRef=11_123456
+
+### 2.3a [QC] Quét ảnh cái thứ 1/2
+POST {{host}}/api/qc/sessions/4/analyze
+Authorization: Bearer {{qc_token}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="vip1.jpg"
+Content-Type: image/jpg
+
+< E:\data set\train\AIR COMPRESSOR\002.jpg
+--WebAppBoundary--
+
+### 2.3b [QC] Quét ảnh cái thứ 2/2 (Chuyển sang PENDING_EXPERT)
+POST {{host}}/api/qc/sessions/4/analyze
+Authorization: Bearer {{qc_token}}
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="vip2.jpg"
+Content-Type: image/jpg
+
+< E:\data set\train\AIR COMPRESSOR\002.jpg
+--WebAppBoundary--
+
+### 2.4 [QC/CHUYÊN GIA] Thẩm định thủ công chốt tổng thể đơn hàng
+PATCH {{host}}/api/qc/sessions/4/inspect
+Authorization: Bearer {{qc_token}}
+Content-Type: application/json
+
+{
+  "status": "FAILED",
+  "overallNote": "Từ chối lô hàng vì phát hiện nhiều linh kiện bị nứt theo đánh giá của chuyên gia."
+}
+
+
+### =====================================================================
+### 3. KIỂM TRA LẠI DOANH THU VÀ THÔNG TIN ĐƠN HÀNG
+### =====================================================================
+
+### 3.1 [CUSTOMER] Xem chi tiết đơn hàng số 3 (Kiểm tra paymentStatus là PAID chưa)
+GET {{host}}/api/customer/sessions/3
+Authorization: Bearer {{customer_token}}
+Accept: application/json
+
+### 3.2 [CUSTOMER] Xem chi tiết đơn hàng số 4 (Kiểm tra xem hiển thị đủ thông tin gói VIP không)
+GET {{host}}/api/customer/sessions/4
+Authorization: Bearer {{customer_token}}
+Accept: application/json
+
+### 3.3 [ADMIN] Xem Doanh thu thực tế trên Dashboard (Chỉ tính những đơn đã chạy qua luồng VNPay thành công)
+GET {{host}}/api/admin/dashboard/statistics
+Authorization: Bearer {{admin_token}}
+Accept: application/json

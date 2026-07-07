@@ -4,6 +4,7 @@ from keras.layers import DepthwiseConv2D
 import numpy as np
 from PIL import Image
 import io
+import os # 🔥 THÊM IMPORT THƯ VIỆN OS
 
 router = APIRouter()
 
@@ -19,7 +20,11 @@ def f1_score(y_true, y_pred):
 # ==========================================
 # NẠP MODEL PHÂN LOẠI (EFFICIENTNET)
 # ==========================================
-model_path = r'E:/data set/EfficientNetB2-40-(224 X 224)- 96.90.h5'
+# 🔥 TỰ ĐỘNG LẤY ĐƯỜNG DẪN BẤT CHẤP LOCAL HAY RENDER
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(CURRENT_DIR, 'EfficientNetB2-40-(224 X 224)- 96.90.h5')
+
+print(f"🔗 Đường dẫn model: {model_path}")
 print("Đang nạp model phân loại, vui lòng đợi...")
 try:
     model = tf.keras.models.load_model(

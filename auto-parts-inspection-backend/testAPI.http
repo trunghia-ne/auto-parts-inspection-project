@@ -1,0 +1,24 @@
+### =================================================================
+### 0. ĐĂNG KÝ TÀI KHOẢN MỚI (SIGN UP)
+### =================================================================
+
+### 0.1 Đăng ký tài khoản Khách hàng
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "customer_tnd",
+  "password": "password123",
+  "email": "customer@tnd.com"
+}
+
+### 0.2 Đăng ký tài khoản QC (Nếu API của bác cho phép truyền Role lúc tạo)
+POST http://localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin123",
+  "email": "qc@tnd.com",
+  "role": "ADMIN"
+}
