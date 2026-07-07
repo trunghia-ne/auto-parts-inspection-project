@@ -125,58 +125,6 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                 </div>
             </div>
-
-            {/* --- KHU VỰC THÔNG TIN BỔ SUNG --- */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Lối tắt (Quick Actions) */}
-                <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200">
-                    <h3 className="text-sm font-bold text-zinc-800 uppercase tracking-wider mb-4">Hành động nhanh</h3>
-                    <div className="space-y-3">
-                        <Link to="/admin/parts" className="flex items-center p-3 rounded-xl border border-zinc-100 hover:border-blue-200 hover:bg-blue-50 transition-all group">
-                            <div className="w-10 h-10 rounded-lg bg-zinc-100 group-hover:bg-blue-100 flex items-center justify-center text-xl transition-colors mr-3">⚙️</div>
-                            <div>
-                                <p className="text-sm font-bold text-zinc-900 group-hover:text-blue-700">Cấu hình Phụ tùng</p>
-                                <p className="text-xs text-zinc-500">Cập nhật giá và AI Class</p>
-                            </div>
-                        </Link>
-                        <Link to="/qc" className="flex items-center p-3 rounded-xl border border-zinc-100 hover:border-emerald-200 hover:bg-emerald-50 transition-all group">
-                            <div className="w-10 h-10 rounded-lg bg-zinc-100 group-hover:bg-emerald-100 flex items-center justify-center text-xl transition-colors mr-3">🔍</div>
-                            <div>
-                                <p className="text-sm font-bold text-zinc-900 group-hover:text-emerald-700">Vào trạm kiểm định</p>
-                                <p className="text-xs text-zinc-500">Xử lý {stats?.pendingSessions || 0} đơn đang chờ</p>
-                            </div>
-                        </Link>
-                    </div>
-                </div>
-
-                {/* Giả lập Trạng thái hệ thống */}
-                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200">
-                    <h3 className="text-sm font-bold text-zinc-800 uppercase tracking-wider mb-4">Trạng thái hạ tầng AI</h3>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                            <div className="flex items-center gap-4">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                <div>
-                                    <p className="text-sm font-bold text-zinc-900">Cloudinary Storage</p>
-                                    <p className="text-xs text-zinc-500">Đồng bộ hình ảnh: Hoạt động bình thường</p>
-                                </div>
-                            </div>
-                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">Stable</span>
-                        </div>
-                        <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-zinc-100">
-                            <div className="flex items-center gap-4">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                <div>
-                                    <p className="text-sm font-bold text-zinc-900">AI Model Endpoint (Python API)</p>
-                                    <p className="text-xs text-zinc-500">Độ trễ trung bình: 120ms</p>
-                                </div>
-                            </div>
-                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">Stable</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             {/* --- KHU VỰC BIỂU ĐỒ TRỰC QUAN --- */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
                 {/* Biểu đồ Xu hướng Doanh thu */}
@@ -227,6 +175,57 @@ export const AdminDashboard: React.FC = () => {
                                 {item.name}
                             </div>
                         ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* --- KHU VỰC THÔNG TIN BỔ SUNG --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Lối tắt (Quick Actions) */}
+                <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200">
+                    <h3 className="text-sm font-bold text-zinc-800 uppercase tracking-wider mb-4">Hành động nhanh</h3>
+                    <div className="space-y-3">
+                        <Link to="/admin/parts" className="flex items-center p-3 rounded-xl border border-zinc-100 hover:border-blue-200 hover:bg-blue-50 transition-all group">
+                            <div className="w-10 h-10 rounded-lg bg-zinc-100 group-hover:bg-blue-100 flex items-center justify-center text-xl transition-colors mr-3">⚙️</div>
+                            <div>
+                                <p className="text-sm font-bold text-zinc-900 group-hover:text-blue-700">Cấu hình Phụ tùng</p>
+                                <p className="text-xs text-zinc-500">Cập nhật giá và AI Class</p>
+                            </div>
+                        </Link>
+                        <Link to="/qc" className="flex items-center p-3 rounded-xl border border-zinc-100 hover:border-emerald-200 hover:bg-emerald-50 transition-all group">
+                            <div className="w-10 h-10 rounded-lg bg-zinc-100 group-hover:bg-emerald-100 flex items-center justify-center text-xl transition-colors mr-3">🔍</div>
+                            <div>
+                                <p className="text-sm font-bold text-zinc-900 group-hover:text-emerald-700">Vào trạm kiểm định</p>
+                                <p className="text-xs text-zinc-500">Xử lý {stats?.pendingSessions || 0} đơn đang chờ</p>
+                            </div>
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Giả lập Trạng thái hệ thống */}
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-zinc-200">
+                    <h3 className="text-sm font-bold text-zinc-800 uppercase tracking-wider mb-4">Trạng thái hạ tầng AI</h3>
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+                            <div className="flex items-center gap-4">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                <div>
+                                    <p className="text-sm font-bold text-zinc-900">Cloudinary Storage</p>
+                                    <p className="text-xs text-zinc-500">Đồng bộ hình ảnh: Hoạt động bình thường</p>
+                                </div>
+                            </div>
+                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">Stable</span>
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-zinc-50 rounded-xl border border-zinc-100">
+                            <div className="flex items-center gap-4">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                <div>
+                                    <p className="text-sm font-bold text-zinc-900">AI Model Endpoint (Python API)</p>
+                                    <p className="text-xs text-zinc-500">Độ trễ trung bình: 120ms</p>
+                                </div>
+                            </div>
+                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">Stable</span>
+                        </div>
                     </div>
                 </div>
             </div>
