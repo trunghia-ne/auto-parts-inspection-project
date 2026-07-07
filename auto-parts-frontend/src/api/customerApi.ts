@@ -21,6 +21,7 @@ export interface SessionResponse {
     quantity: number;
     status: string;
     paymentStatus: string; // 🔥 Thêm trường này để hiển thị UNPAID / PAID công khai
+    paymentMethod: string;
     packageType: string;
     serviceFee: number;
     createdAt: string;
@@ -33,6 +34,7 @@ export interface CreateSessionRequest {
     partId: number;
     quantity: number;
     packageType: string; // 'BASIC_AI' hoặc 'PREMIUM_EXPERT'
+    paymentMethod: string;
 }
 
 export const customerApi = {
@@ -51,6 +53,11 @@ export const customerApi = {
     // 🔥 Cập nhật kiểu trả về ở đây để lấy được paymentUrl luôn
     createSession: async (data: CreateSessionRequest) => {
         const res = await axiosClient.post<CreateSessionResponse>('/customer/sessions', data);
+        return res.data;
+    },
+    // 🔥 Thêm API xác nhận VietQR
+    confirmVietQr: async (id: number) => {
+        const res = await axiosClient.patch(`/customer/sessions/${id}/confirm-vietqr`);
         return res.data;
     }
 };

@@ -71,4 +71,7 @@ public class InspectionSession {
     @Column(name = "payment_status", nullable = false)
     private PaymentStatus paymentStatus = PaymentStatus.UNPAID; // Mặc định khi tạo đơn là Chưa thanh toán
 
+    @Column(name = "payment_method", length = 50)
+    private String paymentMethod;
+
 }

@@ -21,7 +21,9 @@ export const InspectionPage: React.FC = () => {
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
     const [activeBox, setActiveBox] = useState<BoundingBox | null>(null);
 
-
+    const rolesStr = localStorage.getItem('user_roles');
+    const roles: string[] = rolesStr ? JSON.parse(rolesStr) : [];
+    const isAdmin = roles.includes('ROLE_ADMIN') || roles.includes('ADMIN');
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -215,12 +217,22 @@ export const InspectionPage: React.FC = () => {
                         </div>
                         <p className="text-slate-500 text-xs mt-0.5">Hệ thống trạm phân tích khuyết tật và chẩn đoán linh kiện thông minh</p>
                     </div>
-                    <button
-                        onClick={handleLogout}
-                        className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 hover:text-red-600 transition-colors duration-200"
-                    >
-                        Đăng xuất hệ thống
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {isAdmin && (
+                            <button
+                                onClick={() => window.location.href = '/admin'}
+                                className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-xl shadow-sm hover:bg-indigo-100 transition-colors duration-200"
+                            >
+                                📊 Dashboard Quản trị
+                            </button>
+                        )}
+                        <button
+                            onClick={handleLogout}
+                            className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 hover:text-red-600 transition-colors duration-200"
+                        >
+                            Đăng xuất hệ thống
+                        </button>
+                    </div>
                 </div>
 
                 {/* --- STEPS COMPONENT --- */}
@@ -281,7 +293,7 @@ export const InspectionPage: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 text-xs">
-                                        {pendingSessions.filter(session => session.paymentStatus === 'PAID' && ['PENDING', 'PENDING_EXPERT'].includes(session.status)).length === 0 ? (
+                                        {pendingSessions.filter(session => (session.paymentStatus === 'PAID' || session.paymentMethod === 'COD') && ['PENDING', 'PENDING_EXPERT'].includes(session.status)).length === 0 ? (
                                             <tr>
                                                 <td colSpan={5} className="p-12 text-center text-slate-400 bg-white font-medium">
                                                     <div className="max-w-xs mx-auto space-y-2">
@@ -292,7 +304,7 @@ export const InspectionPage: React.FC = () => {
                                             </tr>
                                         ) : (
                                             pendingSessions
-                                                .filter(session => session.paymentStatus === 'PAID' && ['PENDING', 'PENDING_EXPERT'].includes(session.status))
+                                                .filter(session => (session.paymentStatus === 'PAID' || session.paymentMethod === 'COD') && ['PENDING', 'PENDING_EXPERT'].includes(session.status))
                                                 .map(session => (
                                                     <tr key={session.id} className="hover:bg-slate-50/80 transition-colors duration-150">
                                                         <td className="p-4 font-bold text-slate-800">
@@ -313,7 +325,7 @@ export const InspectionPage: React.FC = () => {
                                                         <td className="p-4">
                                                             <div className="flex flex-col gap-1.5 items-start">
                                                                 {getQueueBadge(session.status)}
-                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">💰 PAID</span>
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">💰 {session.paymentMethod === 'COD' && session.paymentStatus !== 'PAID' ? 'COD' : 'PAID'}</span>
                                                             </div>
                                                         </td>
                                                         <td className="p-4 text-right">

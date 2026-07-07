@@ -62,7 +62,8 @@ public class CustomerController {
                         s.getStatus().name(),
                         s.getPaymentStatus().name(),
                         s.getCreatedAt(),
-                        s.getPdfReportUrl()
+                        s.getPdfReportUrl(),
+                        s.getPaymentMethod() != null ? s.getPaymentMethod() : "VNPAY"
                 ))
                 .toList();
 
@@ -109,6 +110,7 @@ public class CustomerController {
                 session.getCreatedAt(),
                 session.getPdfReportUrl(),
                 session.getPackageType(),
+                session.getPaymentMethod() != null ? session.getPaymentMethod() : "VNPAY",
                 scannedItems // Nhét mảng ảnh vào đây
         );
 
@@ -147,7 +149,6 @@ public class CustomerController {
 
         if ("BASIC_AI".equals(req.packageType())) {
             finalPrice = finalPrice / 2;
-            defaultPaymentStatus = PaymentStatus.PAID; // Gói Basic tự động PAID luôn
         }
 
         InspectionSession session = InspectionSession.builder()
@@ -159,6 +160,7 @@ public class CustomerController {
                 .status(InspectionStatus.PENDING)
                 .serviceFee(finalPrice)
                 .paymentStatus(defaultPaymentStatus)
+                .paymentMethod(req.paymentMethod() != null ? req.paymentMethod() : "VNPAY")
                 .build();
 
         sessionRepo.save(session);
@@ -168,14 +170,47 @@ public class CustomerController {
         response.put("message", "Tạo đơn thành công!");
         response.put("sessionId", session.getId());
 
-        // 🔥 NẾU LÀ PREMIUM: Trả thêm Link VNPay để Frontend chuyển hướng
-        if ("PREMIUM_EXPERT".equals(req.packageType())) {
-            Double totalAmount = finalPrice * req.quantity();
+        Double totalAmount = finalPrice * req.quantity();
+        String paymentMethod = req.paymentMethod() != null ? req.paymentMethod() : "VNPAY";
+        if ("VNPAY".equalsIgnoreCase(paymentMethod)) {
             String paymentUrl = vnPayService.createPaymentUrl(session.getId(), totalAmount, request);
             response.put("paymentUrl", paymentUrl);
+        } else if ("VIETQR".equalsIgnoreCase(paymentMethod)) {
+            String bankId = "BIDV";
+            String accountNo = "3144423457";
+            String accountName = "TND AUTO PARTS";
+            String addInfo = "Thanh toan don " + session.getId();
+            String qrUrl = String.format("https://img.vietqr.io/image/%s-%s-compact.png?amount=%.0f&addInfo=%s&accountName=%s",
+                bankId, accountNo, totalAmount, addInfo.replace(" ", "%20"), accountName.replace(" ", "%20"));
+            response.put("paymentUrl", qrUrl);
         }
+        // COD không cần paymentUrl, frontend tự xử lý
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * API 4: Giả lập xác nhận khách đã chuyển khoản VietQR thành công (Dành cho Demo)
+     */
+    @PatchMapping("/{id}/confirm-vietqr")
+    public ResponseEntity<?> confirmVietQrPayment(@PathVariable Long id, @AuthenticationPrincipal UserDetails userDetails) {
+        AppUser currentUser = userRepo.findByUsername(userDetails.getUsername()).orElseThrow();
+        InspectionSession session = sessionRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy đơn: " + id));
+
+        if (!session.getCustomer().getId().equals(currentUser.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Không có quyền!");
+        }
+
+        if (session.getPaymentStatus() == PaymentStatus.PAID) {
+            return ResponseEntity.badRequest().body("Đơn hàng đã được thanh toán rồi.");
+        }
+
+        session.setPaymentStatus(PaymentStatus.PAID);
+        sessionRepo.save(session);
+        statusLogService.logStatusChange(session, session.getStatus(), "Khách hàng xác nhận đã chuyển khoản qua VietQR");
+
+        return ResponseEntity.ok("Xác nhận thanh toán VietQR thành công!");
     }
 }
 
@@ -186,8 +221,8 @@ public class CustomerController {
  */
 record SessionSummaryResponse(
         Long id, String lotCode, String partName, Integer quantity,
-        Integer scannedCount, String status, String paymentStatus, LocalDateTime createdAt, String pdfReportUrl
-        // 🔥 Thêm paymentStatus
+        Integer scannedCount, String status, String paymentStatus, LocalDateTime createdAt, String pdfReportUrl,
+        String paymentMethod
 ) {
 }
 
@@ -199,12 +234,12 @@ record InspectionDetailDto(
 record SessionDetailResponse(
         Long id, String lotCode, String partName, Integer quantity,
         String status, String paymentStatus, LocalDateTime createdAt, String pdfReportUrl, String packageType,
-        // 🔥 Thêm paymentStatus
+        String paymentMethod,
         List<InspectionDetailDto> scannedItems
 ) {
 }
 
 record CreateSessionRequest(
-        String lotCode, Long partId, Integer quantity, String packageType
+        String lotCode, Long partId, Integer quantity, String packageType, String paymentMethod
 ) {
 }

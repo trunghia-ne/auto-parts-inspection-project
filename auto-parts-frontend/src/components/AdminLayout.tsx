@@ -90,6 +90,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                         <Link to="/customer" className="flex items-center p-3 rounded-lg hover:bg-blue-900/30 text-slate-300 hover:text-blue-400 transition">
                             <span className="mr-3">👥</span> Giao diện Khách hàng
                         </Link>
+                        <Link to="/qc" className="flex items-center p-3 rounded-lg hover:bg-blue-900/30 text-slate-300 hover:text-blue-400 transition mt-1">
+                            <span className="mr-3">🔬</span> Trang Kiểm định (QC)
+                        </Link>
                     </div>
                 </nav>
 
