@@ -57,6 +57,7 @@ public class QcController {
                         s.getDetails().size(), // 🔥 Bổ sung: Số lượng đã quét
                         s.getStatus().name(),
                         s.getPaymentStatus() != null ? s.getPaymentStatus().name() : "UNPAID",
+                        s.getPaymentMethod() != null ? s.getPaymentMethod() : "VNPAY",
                         s.getCreatedAt(),
                         s.getPdfReportUrl(),
                         s.getDetails().stream().map(d -> d.getImageUrl()).toList()
@@ -172,6 +173,7 @@ public class QcController {
                 updatedSession.getDetails() != null ? updatedSession.getDetails().size() : 0,
                 updatedSession.getStatus().name(),
                 updatedSession.getPaymentStatus() != null ? updatedSession.getPaymentStatus().name() : "UNPAID",
+                updatedSession.getPaymentMethod() != null ? updatedSession.getPaymentMethod() : "VNPAY",
                 updatedSession.getCreatedAt(),
                 updatedSession.getPdfReportUrl(),
                 updatedSession.getDetails().stream().map(d -> d.getImageUrl()).toList()
@@ -193,6 +195,7 @@ record QcSessionResponse(
         Integer scannedCount,
         String status,
         String paymentStatus, // 🔥 1. Thêm trường này ở đây để khớp Front-end
+        String paymentMethod,
         LocalDateTime createdAt,
         String pdfReportUrl,
         List<String> imageUrls
