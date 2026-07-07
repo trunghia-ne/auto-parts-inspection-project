@@ -11,11 +11,19 @@ export default function CustomerDashboard() {
   const [sessions, setSessions] = useState<SessionResponse[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const rolesStr = localStorage.getItem('user_roles');
+  const roles: string[] = rolesStr ? JSON.parse(rolesStr) : [];
+  const isAdmin = roles.includes('ROLE_ADMIN') || roles.includes('ADMIN');
+
   // Form State
   const [selectedPartId, setSelectedPartId] = useState<number>(0);
   const [lotCode, setLotCode] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [packageType, setPackageType] = useState('BASIC_AI');
+  const [paymentMethod, setPaymentMethod] = useState('VNPAY');
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrUrl, setQrUrl] = useState('');
+  const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
 
   const fetchData = async () => {
     try {
@@ -59,11 +67,20 @@ export default function CustomerDashboard() {
         partId: Number(selectedPartId),
         lotCode,
         quantity,
-        packageType
+        packageType,
+        paymentMethod
       });
 
       if (res.paymentUrl) {
-        window.location.href = res.paymentUrl;
+        if (paymentMethod === 'VIETQR') {
+          setQrUrl(res.paymentUrl);
+          setCurrentSessionId(res.sessionId);
+          setShowQrModal(true);
+          fetchData();
+          setLoading(false);
+        } else {
+          window.location.href = res.paymentUrl;
+        }
       } else {
         fetchData();
         setLoading(false);
@@ -97,6 +114,16 @@ export default function CustomerDashboard() {
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> SYSTEM READY
             </div>
             
+            {isAdmin && (
+              <button 
+                onClick={() => window.location.href = '/admin'}
+                className="flex items-center gap-1.5 text-xs font-semibold bg-white text-indigo-600 border border-indigo-200 px-3 py-1.5 rounded-md hover:bg-indigo-50 hover:text-indigo-700 transition-all"
+                title="Quay về trang quản trị"
+              >
+                Về Dashboard
+              </button>
+            )}
+
             <button 
               onClick={handleLogout}
               className="flex items-center gap-1.5 text-xs font-semibold bg-white text-gray-600 border border-gray-200 px-3 py-1.5 rounded-md hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all"
@@ -203,6 +230,24 @@ export default function CustomerDashboard() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-2">Phương thức thanh toán</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <label className={`flex flex-col items-center p-3 border rounded-lg cursor-pointer transition-all ${paymentMethod === 'VNPAY' ? 'border-blue-600 bg-blue-50/40 text-blue-700' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}>
+                    <input type="radio" name="paymentMethod" className="hidden" checked={paymentMethod === 'VNPAY'} onChange={() => setPaymentMethod('VNPAY')} />
+                    <span className="font-bold text-sm">VNPay</span>
+                  </label>
+                  <label className={`flex flex-col items-center p-3 border rounded-lg cursor-pointer transition-all ${paymentMethod === 'VIETQR' ? 'border-blue-600 bg-blue-50/40 text-blue-700' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}>
+                    <input type="radio" name="paymentMethod" className="hidden" checked={paymentMethod === 'VIETQR'} onChange={() => setPaymentMethod('VIETQR')} />
+                    <span className="font-bold text-sm">VietQR</span>
+                  </label>
+                  <label className={`flex flex-col items-center p-3 border rounded-lg cursor-pointer transition-all ${paymentMethod === 'COD' ? 'border-blue-600 bg-blue-50/40 text-blue-700' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}>
+                    <input type="radio" name="paymentMethod" className="hidden" checked={paymentMethod === 'COD'} onChange={() => setPaymentMethod('COD')} />
+                    <span className="font-bold text-sm">Tiền mặt (COD)</span>
+                  </label>
+                </div>
+              </div>
+
               {/* BẢNG TÍNH TIỀN TRỰC QUAN */}
               <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 text-sm font-medium text-gray-600 space-y-1.5">
                 <div className="flex justify-between text-xs">
@@ -221,7 +266,7 @@ export default function CustomerDashboard() {
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold shadow-sm transition-all flex items-center justify-center gap-2 text-sm"
               >
                 <CreditCard className="w-4 h-4" />
-                {loading ? "Đang xử lý biểu mẫu..." : "Xác nhận & Tới cổng thanh toán VNPay"}
+                {loading ? "Đang xử lý biểu mẫu..." : (paymentMethod === 'VNPAY' ? "Xác nhận & Thanh toán VNPay" : paymentMethod === 'VIETQR' ? "Xác nhận & Quét mã VietQR" : "Xác nhận đặt đơn (COD)")}
               </button>
             </form>
           </div>
@@ -272,10 +317,12 @@ export default function CustomerDashboard() {
                           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border ${
                             s.paymentStatus === 'PAID' 
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                              : s.paymentMethod === 'COD'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
                               : 'bg-rose-50 text-rose-600 border-rose-200'
                           }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${s.paymentStatus === 'PAID' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                            {s.paymentStatus === 'PAID' ? 'Đã thu' : 'Chờ VNPay'}
+                            <span className={`w-1.5 h-1.5 rounded-full ${s.paymentStatus === 'PAID' ? 'bg-emerald-500' : s.paymentMethod === 'COD' ? 'bg-blue-500' : 'bg-rose-500'}`} />
+                            {s.paymentStatus === 'PAID' ? 'Đã thu' : s.paymentMethod === 'COD' ? 'COD' : 'Chờ thanh toán'}
                           </span>
                         </td>
                         
@@ -314,10 +361,44 @@ export default function CustomerDashboard() {
               </table>
             </div>
           </div>
-          
         </div>
-        
       </div>
+
+      {/* MODAL HIỂN THỊ MÃ QR */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full text-center space-y-5 shadow-2xl border border-slate-100">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Quét mã để thanh toán</h3>
+              <p className="text-sm text-slate-500 mt-1">Sử dụng ứng dụng ngân hàng để quét mã QR</p>
+            </div>
+            
+            <div className="flex justify-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <img src={qrUrl} alt="VietQR Code" className="w-full max-w-[250px] object-contain rounded-lg shadow-sm mix-blend-multiply" />
+            </div>
+            
+            <button
+              onClick={async () => {
+                if (currentSessionId) {
+                  try {
+                    await customerApi.confirmVietQr(currentSessionId);
+                    fetchData(); // Load lại danh sách để thấy chữ "Đã thu"
+                    setShowQrModal(false);
+                    setCurrentSessionId(null);
+                  } catch (err) {
+                    alert('Có lỗi khi xác nhận thanh toán!');
+                  }
+                } else {
+                  setShowQrModal(false);
+                }
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-md shadow-blue-100"
+            >
+              Tôi đã chuyển khoản xong
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};

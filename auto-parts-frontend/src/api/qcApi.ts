@@ -17,6 +17,7 @@ export interface QcSessionResponse {
     scannedCount: number; 
     status: string;         // PENDING, PENDING_EXPERT, PASSED, FAILED
     paymentStatus: string;  // 🔥 Thêm trường này (Ví dụ: PAID, UNPAID)
+    paymentMethod: string;
     createdAt: string;
     pdfReportUrl: string | null;
     imageUrls?: string[];
