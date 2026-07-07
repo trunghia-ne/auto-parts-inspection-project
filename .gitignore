@@ -75,3 +75,5 @@ coverage.xml
 
 # Môi trường (Environment variables)
 .envs
+
+*.h5
