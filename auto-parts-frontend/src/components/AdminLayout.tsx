@@ -37,8 +37,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                 </div>
 
                 <nav className="flex-1 overflow-y-auto p-4 space-y-2">
-                    <Link 
-                        to="/admin" 
+                    <Link
+                        to="/admin"
                         className={`flex items-center p-3 rounded-lg transition ${isActive('/admin') ? 'bg-blue-600' : 'hover:bg-slate-800'}`}
                     >
                         <span className="mr-3">📊</span> Dashboard
@@ -104,11 +104,9 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
             <div className="flex-1 flex flex-col overflow-hidden">
                 <header className="bg-white shadow-sm h-16 flex items-center justify-between px-8 z-10">
                     <div className="flex items-center text-gray-500 text-sm">
-                        <span>Trang quản trị</span>
-                        <span className="mx-2">/</span>
-                        <span className="text-blue-600 font-medium">Hệ thống</span>
+                      
                     </div>
-                    
+
                     <div className="flex items-center space-x-4">
                         <div className="text-right">
                             <p className="text-sm font-bold text-gray-700">Administrator</p>
