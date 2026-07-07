@@ -16,7 +16,7 @@ export const InspectionPage: React.FC = () => {
 
     // --- State Vẽ khung lỗi ---
     const [boxes, setBoxes] = useState<BoundingBox[]>([]);
-    const [currentLabel, setCurrentLabel] = useState<'scratch' | 'crack'>('scratch');
+    const [currentLabel] = useState<'scratch' | 'crack'>('scratch');
     const [isDrawing, setIsDrawing] = useState(false);
     const [startPos, setStartPos] = useState({ x: 0, y: 0 });
     const [activeBox, setActiveBox] = useState<BoundingBox | null>(null);
@@ -159,9 +159,9 @@ export const InspectionPage: React.FC = () => {
         fetchPending();
     };
 
-    const handleUndo = () => {
-        if (boxes.length > 0) setBoxes((prev) => prev.slice(0, -1));
-    };
+    // const handleUndo = () => {
+    //     if (boxes.length > 0) setBoxes((prev) => prev.slice(0, -1));
+    // };
 
     const getQueueBadge = (status: string) => {
         if (status === 'PENDING_EXPERT') {
