@@ -7,6 +7,7 @@ import com.tnd.auto_parts.repository.InspectionDetailRepository;
 import com.tnd.auto_parts.repository.InspectionSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -28,8 +29,9 @@ public class AiClientService {
     private final InspectionSessionRepository sessionRepository;
     private final InspectionDetailRepository detailRepository;
 
-    // Cổng 8000 của Uvicorn FastAPI
-    private static final String PYTHON_AI_URL = "http://localhost:8000/api/predict";
+    @Value("${PYTHON_SERVER_URL:http://localhost:8000}/api/predict")
+    private String PYTHON_AI_URL;
+
 
     /**
      * 🔥 HÀM MỚI: Xử lý quét từng sản phẩm, gọi AI và lưu vào bảng chi tiết (inspection_details)
