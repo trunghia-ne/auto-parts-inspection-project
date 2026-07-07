@@ -14,6 +14,6 @@ export interface RegisterRequest {
 
 export const authApi = {
   register: (data: RegisterRequest): Promise<any> => {
-    return axiosClient.post('/auth/register', data).then(res => res.data);
+    return axiosClient.post('auth/register', data).then(res => res.data);
   }
 };
