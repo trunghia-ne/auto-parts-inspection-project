@@ -39,25 +39,25 @@ export interface CreateSessionRequest {
 
 export const customerApi = {
     getAvailableParts: async () => {
-        const res = await axiosClient.get<Part[]>('/customer/sessions/parts');
+        const res = await axiosClient.get<Part[]>('customer/sessions/parts');
         return res.data;
     },
     getMySessions: async () => {
-        const res = await axiosClient.get<SessionResponse[]>('/customer/sessions');
+        const res = await axiosClient.get<SessionResponse[]>('customer/sessions');
         return res.data;
     },
     getSessionDetail: async (id: number) => {
-        const res = await axiosClient.get<SessionResponse>(`/customer/sessions/${id}`);
+        const res = await axiosClient.get<SessionResponse>(`customer/sessions/${id}`);
         return res.data;
     },
     // 🔥 Cập nhật kiểu trả về ở đây để lấy được paymentUrl luôn
     createSession: async (data: CreateSessionRequest) => {
-        const res = await axiosClient.post<CreateSessionResponse>('/customer/sessions', data);
+        const res = await axiosClient.post<CreateSessionResponse>('customer/sessions', data);
         return res.data;
     },
     // 🔥 Thêm API xác nhận VietQR
     confirmVietQr: async (id: number) => {
-        const res = await axiosClient.patch(`/customer/sessions/${id}/confirm-vietqr`);
+        const res = await axiosClient.patch(`customer/sessions/${id}/confirm-vietqr`);
         return res.data;
     }
 };

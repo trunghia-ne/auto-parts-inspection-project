@@ -32,7 +32,7 @@ export interface QcManualInspectRequest {
 export const qcApi = {
     // 1. Lấy danh sách hàng đợi chờ xử lý (PENDING và PENDING_EXPERT)
     getPendingSessions: async () => {
-        const res = await axiosClient.get<QcSessionResponse[]>('/qc/sessions/pending');
+        const res = await axiosClient.get<QcSessionResponse[]>('qc/sessions/pending');
         return res.data;
     },
 
@@ -44,7 +44,7 @@ export const qcApi = {
             formData.append('boundingBoxes', boundingBoxes);
         }
         
-        const res = await axiosClient.post<string>(`/qc/sessions/${id}/analyze`, formData, {
+        const res = await axiosClient.post<string>(`qc/sessions/${id}/analyze`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
         return res.data; // Trả về câu thông báo: "Đã lưu ảnh thứ X/Y thành công!"
@@ -52,7 +52,7 @@ export const qcApi = {
 
     // 3. Chuyên gia ký duyệt đóng hồ sơ bằng tay (Dành cho đơn PENDING_EXPERT)
     manualInspect: async (id: number, data: QcManualInspectRequest) => {
-        const res = await axiosClient.patch<QcSessionResponse>(`/qc/sessions/${id}/inspect`, data);
+        const res = await axiosClient.patch<QcSessionResponse>(`qc/sessions/${id}/inspect`, data);
         return res.data; 
     }
 };
