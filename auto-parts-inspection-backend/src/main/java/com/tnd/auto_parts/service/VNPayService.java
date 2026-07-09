@@ -36,7 +36,7 @@ public class VNPayService {
         vnp_Params.put("vnp_OrderInfo", vnp_OrderInfo);
         vnp_Params.put("vnp_Locale", "vn");
         vnp_Params.put("vnp_OrderType", "other");
-        vnp_Params.put("vnp_ReturnUrl", "http://localhost:5173/payment-result"); // Link Frontend nhận kết quả hiển thị
+        vnp_Params.put("vnp_ReturnUrl", "https://auto-parts-frontend-b41k.onrender.com/payment-result"); // Link Frontend nhận kết quả hiển thị
         vnp_Params.put("vnp_IpAddr", request.getRemoteAddr());
 
         Calendar cld = Calendar.getInstance(TimeZone.getTimeZone("Etc/GMT+7"));
