@@ -29,7 +29,8 @@ print("Đang nạp model phân loại, vui lòng đợi...")
 try:
     model = tf.keras.models.load_model(
         model_path, 
-        custom_objects={'DepthwiseConv2D': FixedDepthwiseConv2D, 'F1_score': f1_score}
+        custom_objects={'DepthwiseConv2D': FixedDepthwiseConv2D},
+        compile=False
     )
     print("Model đã nạp xong!")
 except Exception as e:
